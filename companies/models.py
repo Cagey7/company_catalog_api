@@ -2,18 +2,21 @@ from django.db import models
 
 
 class Company(models.Model):
-    name_ru = models.CharField(max_length=1024, null=True, verbose_name="Название организации на русском")
-    name_kz = models.CharField(max_length=1024, null=True, verbose_name="Название организации на казахском")
+    name_ru = models.CharField(max_length=1024, null=True, blank=True, verbose_name="Название организации на русском")
+    name_kz = models.CharField(max_length=1024, null=True, blank=True, verbose_name="Название организации на казахском")
     register_date = models.DateField(null=True, verbose_name="Время создания организации")
     ceo = models.CharField(max_length=512, null=True, verbose_name="Руководитель организации")
     company_bin = models.CharField(max_length=12, unique=True, verbose_name="БИН")
-    address_ru = models.CharField(max_length=1024, null=True, verbose_name="Адрес организации на русском")
-    address_kz = models.CharField(max_length=1024, null=True, verbose_name="Адрес организации на казахском")
-    krp = models.ForeignKey("Krp", on_delete=models.PROTECT, null=True, verbose_name="КРП")
-    kse = models.ForeignKey("Kse", on_delete=models.PROTECT, null=True, verbose_name="КСЕ")
-    kfc = models.ForeignKey("Kfc", on_delete=models.PROTECT, null=True, verbose_name="КФС")
-    kato = models.ForeignKey("Kato", on_delete=models.PROTECT, null=True, verbose_name="КАТО")
-    primary_oked = models.ForeignKey("Oked", on_delete=models.PROTECT, null=True, related_name="primary_oked", verbose_name="ОКЭД")
+    address = models.CharField(max_length=1024, null=True, blank=True, verbose_name="Адрес организации на русском")
+    phone_number = models.CharField(max_length=128, null=True, blank=True, verbose_name="Номер телефона")
+    email = models.CharField(max_length=255, null=True, blank=True, verbose_name="Электронная почта")
+    krp = models.ForeignKey("Krp", on_delete=models.PROTECT, null=True, blank=True, verbose_name="КРП")
+    kse = models.ForeignKey("Kse", on_delete=models.PROTECT, null=True, blank=True, verbose_name="КСЕ")
+    kfc = models.ForeignKey("Kfc", on_delete=models.PROTECT, null=True, blank=True, verbose_name="КФС")
+    kato = models.ForeignKey("Kato", on_delete=models.PROTECT, null=True, blank=True, verbose_name="КАТО")
+    product = models.ManyToManyField("Product", blank=True)
+    industry = models.ForeignKey("Industry", on_delete=models.PROTECT, null=True)
+    primary_oked = models.ForeignKey("Oked", on_delete=models.PROTECT, null=True, blank=True, related_name="primary_oked", verbose_name="ОКЭД")
     secondary_okeds = models.ManyToManyField("Oked", related_name="secondary_okeds")
     updated = models.DateTimeField(auto_now=True)
     
@@ -22,6 +25,8 @@ class Company(models.Model):
 
     class Meta:
         db_table = "companies"
+        verbose_name = "Компании"
+        verbose_name_plural = "Компании"
 
 
 class Krp(models.Model):
@@ -33,6 +38,8 @@ class Krp(models.Model):
 
     class Meta:
         db_table = "krp"
+        verbose_name = "Размер предприятия"
+        verbose_name_plural = "Размер предприятия"
     
 
 class Kse(models.Model):
@@ -44,6 +51,8 @@ class Kse(models.Model):
 
     class Meta:
         db_table = "kse"
+        verbose_name = "Экономические сектора"
+        verbose_name_plural = "Экономические сектора"
 
 
 class Kfc(models.Model):
@@ -55,6 +64,8 @@ class Kfc(models.Model):
 
     class Meta:
         db_table = "kfc"
+        verbose_name = "Форма собственности"
+        verbose_name_plural = "Форма собственности"
 
 
 class Kato(models.Model):
@@ -66,6 +77,8 @@ class Kato(models.Model):
 
     class Meta:
         db_table = "kato"
+        verbose_name = "Административно-территориальные объекты (КАТО)"
+        verbose_name_plural = "Административно-территориальные объекты (КАТО)"
 
 
 class Oked(models.Model):
@@ -77,6 +90,32 @@ class Oked(models.Model):
 
     class Meta:
         db_table = "oked"
+        verbose_name = "Виды экономической деятельности (ОКЭД)"
+        verbose_name_plural = "Виды экономической деятельности (ОКЭД)"
+
+
+class Industry(models.Model):
+    name = models.CharField(max_length=255, unique=True)
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        db_table = "industries"
+        verbose_name = "Отрасль"
+        verbose_name_plural = "Отрасли"
+
+
+class Product(models.Model):
+    name = models.CharField(max_length=255, unique=True)
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        db_table = "product"
+        verbose_name = "Тип товара"
+        verbose_name_plural = "Типы товаров"
 
 
 class CompanyContact(models.Model):
@@ -106,8 +145,8 @@ class Tnved(models.Model):
 
     class Meta:
         db_table = "tnved"
-        verbose_name = "ТН ВЭД"
-        verbose_name_plural = "ТН ВЭД"
+        verbose_name = "ТН ВЭДы"
+        verbose_name_plural = "ТН ВЭДы"
 
 
 class CompanyProduct(models.Model):
