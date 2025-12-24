@@ -10,6 +10,7 @@ from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
 from .serializers import *
 from .models import *
+from dictionaries.models import *
 
 
 class LoadCompanyData(APIView):
