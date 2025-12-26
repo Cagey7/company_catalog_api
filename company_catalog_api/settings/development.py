@@ -7,7 +7,7 @@ DEBUG = True
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": "company_catalog_api_development",
+        "NAME": "com",
         "USER": "postgres",
         "PASSWORD": "123456",
         "HOST": "localhost",

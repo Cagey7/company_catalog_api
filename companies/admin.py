@@ -1,6 +1,32 @@
 from django.contrib import admin
+from django.db.models import Count
 
 from .models import Company, CompanyContact
+from dictionaries.models import Industry
+
+
+class IndustryUsedFilter(admin.SimpleListFilter):
+    title = "Отрасль"
+    parameter_name = "industry"
+
+    def lookups(self, request, model_admin):
+        """
+        Показываем только те Industry,
+        которые используются хотя бы в одной Company
+        """
+        qs = (
+            Industry.objects
+            .annotate(company_count=Count("company"))
+            .filter(company_count__gt=0)
+            .order_by("name")
+        )
+        return [(i.id, i.name) for i in qs]
+
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(industry_id=self.value())
+        return queryset
+
 
 class CompanyContactInline(admin.TabularInline):
     model = CompanyContact
@@ -17,6 +43,7 @@ class CompanyContactInline(admin.TabularInline):
 
 @admin.register(Company)
 class CompanyAdmin(admin.ModelAdmin):
+    show_facets = admin.ShowFacets.NEVER
     list_display = (
         "name_ru",
         "company_bin",
@@ -27,7 +54,7 @@ class CompanyAdmin(admin.ModelAdmin):
     )
 
     list_filter = (
-        "industry",
+        IndustryUsedFilter,
         "primary_oked",
         "kfc",
         "kse",
@@ -99,7 +126,20 @@ class CompanyAdmin(admin.ModelAdmin):
 
 @admin.register(CompanyContact)
 class CompanyContactAdmin(admin.ModelAdmin):
-    list_display = ("company", "full_name", "position", "email", "phone", "is_mailing_contact")
-    search_fields = ("company__name_ru", "company__company_bin", "full_name", "email", "phone")
+    list_display = (
+        "company",
+        "full_name",
+        "position",
+        "email",
+        "phone",
+        "is_mailing_contact",
+    )
+    search_fields = (
+        "company__company_bin",
+        "company__name_ru",
+        "full_name",
+        "email",
+        "phone",
+    )
     list_filter = ("is_mailing_contact",)
     autocomplete_fields = ("company",)

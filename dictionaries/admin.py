@@ -49,13 +49,13 @@ class ProductAdmin(admin.ModelAdmin):
 
 @admin.register(Tnved)
 class TnvedAdmin(admin.ModelAdmin):
-    list_display = ("code", "name_ru")
-    search_fields = ("code", "name_ru")
+    list_display = ("tn_ved_code", "tn_ved_name")
+    search_fields = ("tn_ved_code", "tn_ved_name")
 
 
 # Если CompanyProduct у тебя реально лежит в dictionaries/models.py — регистрируй тут:
 @admin.register(CompanyProduct)
 class CompanyProductAdmin(admin.ModelAdmin):
     list_display = ("company", "tnved")
-    search_fields = ("company__name_ru", "company__company_bin", "tnved__code", "tnved__name_ru")
+    search_fields = ("company__tn_ved_name", "company__company_bin", "tnved__tn_ved_code", "tnved__tn_ved_name")
     autocomplete_fields = ("company", "tnved")

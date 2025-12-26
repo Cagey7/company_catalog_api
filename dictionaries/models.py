@@ -2,7 +2,7 @@ from django.db import models
 
 
 class Krp(models.Model):
-    krp_code = models.IntegerField(unique=True, verbose_name="КРП код")
+    krp_code = models.CharField(max_length=10, unique=True, verbose_name="Код КРП")
     krp_name = models.CharField(max_length=512, verbose_name="КРП название")
     
     def __str__(self):
@@ -15,7 +15,7 @@ class Krp(models.Model):
     
 
 class Kse(models.Model):
-    kse_code = models.IntegerField(unique=True, verbose_name="КСЕ код")
+    kse_code = models.CharField(max_length=10, unique=True, verbose_name="Код КСЕ")
     kse_name = models.CharField(max_length=512, verbose_name="КСЕ название")
 
     def __str__(self):
@@ -28,7 +28,7 @@ class Kse(models.Model):
 
 
 class Kfc(models.Model):
-    kfc_code = models.IntegerField(unique=True, verbose_name="КФС код")
+    kfc_code = models.CharField(max_length=10, unique=True, verbose_name="Код КФС")
     kfc_name = models.CharField(max_length=512, verbose_name="КФС название")
 
     def __str__(self):
@@ -41,7 +41,7 @@ class Kfc(models.Model):
 
 
 class Kato(models.Model):
-    kato_code = models.IntegerField(unique=True, verbose_name="КАТО коде")
+    kato_code = models.CharField(max_length=12, unique=True, verbose_name="Код КАТО")
     kato_name = models.CharField(max_length=512, verbose_name="КАТО название")
     
     def __str__(self):
@@ -54,7 +54,7 @@ class Kato(models.Model):
 
 
 class Oked(models.Model):
-    oked_code = models.IntegerField(unique=True, verbose_name="ОКЭД код")
+    oked_code = models.CharField(max_length=10, unique=True, verbose_name="Код ОКЭД")
     oked_name = models.CharField(max_length=512, verbose_name="ОКЭД название")
 
     def __str__(self):
@@ -68,6 +68,7 @@ class Oked(models.Model):
 
 class Industry(models.Model):
     name = models.CharField(max_length=255, unique=True)
+    parent = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, related_name="children")
 
     def __str__(self):
         return self.name
@@ -80,6 +81,7 @@ class Industry(models.Model):
 
 class Product(models.Model):
     name = models.CharField(max_length=255, unique=True)
+    parent = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, related_name="children")
 
     def __str__(self):
         return self.name
@@ -92,11 +94,11 @@ class Product(models.Model):
 
 
 class Tnved(models.Model):
-    code = models.CharField(max_length=10, unique=True, verbose_name="Код ТН ВЭД")
-    name_ru = models.CharField(max_length=1024, null=True, blank=True, verbose_name="Наименование ТН ВЭД")
+    tn_ved_code = models.CharField(max_length=10, unique=True, verbose_name="Код ТН ВЭД")
+    tn_ved_name = models.CharField(max_length=1024, null=True, blank=True, verbose_name="Наименование ТН ВЭД")
 
     def __str__(self):
-        return f"{self.code} — {self.name_ru}"
+        return f"{self.tn_ved_code} — {self.tn_ved_name}"
 
     class Meta:
         db_table = "tnved"

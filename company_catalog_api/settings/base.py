@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'users.apps.UsersConfig',
     'programs.apps.ProgramsConfig',
     'dictionaries.apps.DictionariesConfig',
+    'metrics.apps.MetricsConfig',
 ]
 
 MIDDLEWARE = [
