@@ -53,7 +53,6 @@ class TnvedAdmin(admin.ModelAdmin):
     search_fields = ("tn_ved_code", "tn_ved_name")
 
 
-# Если CompanyProduct у тебя реально лежит в dictionaries/models.py — регистрируй тут:
 @admin.register(CompanyProduct)
 class CompanyProductAdmin(admin.ModelAdmin):
     list_display = ("company", "tnved")

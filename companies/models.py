@@ -4,8 +4,8 @@ from django.db import models
 class Company(models.Model):
     name_ru = models.CharField(max_length=1024, null=True, blank=True, verbose_name="Название организации на русском")
     name_kz = models.CharField(max_length=1024, null=True, blank=True, verbose_name="Название организации на казахском")
-    register_date = models.DateField(null=True, verbose_name="Время создания организации")
-    ceo = models.CharField(max_length=512, null=True, verbose_name="Руководитель организации")
+    register_date = models.DateField(null=True, blank=True, verbose_name="Время создания организации")
+    ceo = models.CharField(max_length=512, null=True, blank=True, verbose_name="Руководитель организации")
     company_bin = models.CharField(max_length=12, unique=True, verbose_name="БИН")
     pay_nds = models.BooleanField(null=True, verbose_name="Плательщик НДС")
     tax_risk = models.CharField(max_length=32, null=True, verbose_name="Степень риска налогоплательщика")
@@ -17,9 +17,9 @@ class Company(models.Model):
     kfc = models.ForeignKey("dictionaries.Kfc", on_delete=models.PROTECT, null=True, blank=True, verbose_name="КФС")
     kato = models.ForeignKey("dictionaries.Kato", on_delete=models.PROTECT, null=True, blank=True, verbose_name="КАТО")
     product = models.ManyToManyField("dictionaries.Product", blank=True)
-    industry = models.ForeignKey("dictionaries.Industry", on_delete=models.PROTECT, null=True)
+    industry = models.ForeignKey("dictionaries.Industry", on_delete=models.PROTECT, null=True, blank=True)
     primary_oked = models.ForeignKey("dictionaries.Oked", on_delete=models.PROTECT, null=True, blank=True, related_name="primary_oked", verbose_name="ОКЭД")
-    secondary_okeds = models.ManyToManyField("dictionaries.Oked", related_name="secondary_okeds")
+    secondary_okeds = models.ManyToManyField("dictionaries.Oked", blank=True, related_name="secondary_okeds")
     updated = models.DateTimeField(auto_now=True)
     
     def __str__(self):
