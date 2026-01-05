@@ -1,10 +1,10 @@
 from django.contrib import admin, messages
-from django.db.models import Count
+from django.db.models import Count, Exists, OuterRef, Q
 from django.urls import path, reverse
 from django.shortcuts import get_object_or_404, redirect
 from django.utils.html import format_html
 
-from .models import Company, CompanyContact
+from .models import Company, CompanyContact, ContactEmail, ContactPhone
 from dictionaries.models import Industry
 
 from .services.prg_loader import load_company_data_by_bin, CompanyLoadError
@@ -29,19 +29,130 @@ class IndustryUsedFilter(admin.SimpleListFilter):
         return queryset
 
 
-class CompanyContactInline(admin.TabularInline):
-    model = CompanyContact
-    extra = 1
-    fields = (
+# -------------------------
+# Inlines for contact details
+# -------------------------
+class ContactEmailInline(admin.TabularInline):
+    model = ContactEmail
+    extra = 0
+    fields = ("email", "is_primary", "is_mailing")
+    ordering = ("-is_primary", "-is_mailing", "id")
+
+
+class ContactPhoneInline(admin.TabularInline):
+    model = ContactPhone
+    extra = 0
+    fields = ("phone", "is_primary", "is_mailing")
+    ordering = ("-is_primary", "-is_mailing", "id")
+
+
+# -------------------------
+# Filters for mailing flags
+# -------------------------
+class HasMailingEmailFilter(admin.SimpleListFilter):
+    title = "Есть email для рассылки"
+    parameter_name = "has_mailing_email"
+
+    def lookups(self, request, model_admin):
+        return [("1", "Да"), ("0", "Нет")]
+
+    def queryset(self, request, queryset):
+        if self.value() == "1":
+            return queryset.filter(emails__is_mailing=True).distinct()
+        if self.value() == "0":
+            return queryset.exclude(emails__is_mailing=True).distinct()
+        return queryset
+
+
+class HasMailingPhoneFilter(admin.SimpleListFilter):
+    title = "Есть телефон для рассылки"
+    parameter_name = "has_mailing_phone"
+
+    def lookups(self, request, model_admin):
+        return [("1", "Да"), ("0", "Нет")]
+
+    def queryset(self, request, queryset):
+        if self.value() == "1":
+            return queryset.filter(phones__is_mailing=True).distinct()
+        if self.value() == "0":
+            return queryset.exclude(phones__is_mailing=True).distinct()
+        return queryset
+
+
+# -------------------------
+# CompanyContact Admin
+# -------------------------
+@admin.register(CompanyContact)
+class CompanyContactAdmin(admin.ModelAdmin):
+    list_display = (
+        "company",
         "full_name",
         "position",
-        "email",
-        "phone",
-        "is_mailing_contact",
-        "notes",
+        "primary_email",
+        "primary_phone",
+        "mailing_emails",
+        "mailing_phones",
     )
 
+    search_fields = (
+        "company__company_bin",
+        "company__name_ru",
+        "full_name",
+        "position",
+        "emails__email",
+        "phones__phone",
+    )
 
+    list_filter = (HasMailingEmailFilter, HasMailingPhoneFilter)
+    autocomplete_fields = ("company",)
+    inlines = (ContactEmailInline, ContactPhoneInline)
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.select_related("company").prefetch_related("emails", "phones")
+
+    @admin.display(description="Primary Email")
+    def primary_email(self, obj: CompanyContact):
+        e = obj.emails.filter(is_primary=True).first() or obj.emails.first()
+        return e.email if e else "-"
+
+    @admin.display(description="Primary Phone")
+    def primary_phone(self, obj: CompanyContact):
+        p = obj.phones.filter(is_primary=True).first() or obj.phones.first()
+        return p.phone if p else "-"
+
+    @admin.display(description="Emails для рассылки")
+    def mailing_emails(self, obj: CompanyContact):
+        emails = [e.email for e in obj.emails.all() if e.is_mailing]
+        return ", ".join(emails) if emails else "-"
+
+    @admin.display(description="Телефоны для рассылки")
+    def mailing_phones(self, obj: CompanyContact):
+        phones = [p.phone for p in obj.phones.all() if p.is_mailing]
+        return ", ".join(phones) if phones else "-"
+
+
+# -------------------------
+# Company Inline: show contacts (no nested inlines)
+# -------------------------
+class CompanyContactInline(admin.TabularInline):
+    model = CompanyContact
+    extra = 0
+    fields = ("full_name", "position", "contact_link")
+    readonly_fields = ("contact_link",)
+    show_change_link = False
+
+    @admin.display(description="Открыть")
+    def contact_link(self, obj: CompanyContact):
+        if not obj or not obj.pk:
+            return "-"
+        url = reverse("admin:companies_companycontact_change", args=[obj.pk])
+        return format_html('<a href="{}">Открыть</a>', url)
+
+
+# -------------------------
+# Company Admin
+# -------------------------
 @admin.register(Company)
 class CompanyAdmin(admin.ModelAdmin):
     show_facets = admin.ShowFacets.NEVER
@@ -86,7 +197,6 @@ class CompanyAdmin(admin.ModelAdmin):
     )
 
     filter_horizontal = ("secondary_okeds", "product")
-
     readonly_fields = ("updated", "load_data_button")
 
     inlines = (CompanyContactInline,)
@@ -165,24 +275,3 @@ class CompanyAdmin(admin.ModelAdmin):
             self.message_user(request, f"Неожиданная ошибка: {e}", level=messages.ERROR)
 
         return redirect(reverse("admin:companies_company_change", args=[pk]))
-
-
-@admin.register(CompanyContact)
-class CompanyContactAdmin(admin.ModelAdmin):
-    list_display = (
-        "company",
-        "full_name",
-        "position",
-        "email",
-        "phone",
-        "is_mailing_contact",
-    )
-    search_fields = (
-        "company__company_bin",
-        "company__name_ru",
-        "full_name",
-        "email",
-        "phone",
-    )
-    list_filter = ("is_mailing_contact",)
-    autocomplete_fields = ("company",)

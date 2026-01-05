@@ -32,18 +32,57 @@ class Company(models.Model):
 
 
 class CompanyContact(models.Model):
-    company = models.ForeignKey("companies.Company", on_delete=models.CASCADE, related_name="contacts", verbose_name="Организация")
-    full_name = models.CharField(max_length=255, null=True, blank=True, verbose_name="ФИО")
-    position = models.CharField(max_length=255, null=True, blank=True, verbose_name="Должность")
-    email = models.EmailField(null=True, blank=True, verbose_name="Email")
-    phone = models.CharField(max_length=20, null=True, blank=True, verbose_name="Телефон")
-    is_mailing_contact = models.BooleanField(default=False, verbose_name="Использовать для рассылок")
-    notes = models.TextField(null=True, blank=True, verbose_name="Примечания")
+    company = models.ForeignKey(
+        "companies.Company",
+        on_delete=models.CASCADE,
+        related_name="contacts",
+        verbose_name="Организация"
+    )
+    full_name = models.CharField(max_length=255, null=True, blank=True)
+    position = models.CharField(max_length=255, null=True, blank=True)
+    notes = models.TextField(null=True, blank=True)
 
     def __str__(self):
-        return self.full_name or self.label or self.email or self.phone or f"Контакт #{self.id}"
+        return self.full_name or f"Контакт #{self.id}"
 
     class Meta:
         db_table = "company_contacts"
         verbose_name = "Контакт компании"
         verbose_name_plural = "Контакты компаний"
+
+
+class ContactEmail(models.Model):
+    contact = models.ForeignKey(
+        "companies.CompanyContact",
+        on_delete=models.CASCADE,
+        related_name="emails"
+    )
+    email = models.EmailField()
+    is_primary = models.BooleanField(default=False)
+    is_mailing = models.BooleanField(default=False)
+
+    def __str__(self):
+        return self.email
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["contact", "email"], name="uniq_contact_email"),
+        ]
+
+class ContactPhone(models.Model):
+    contact = models.ForeignKey(
+        "companies.CompanyContact",
+        on_delete=models.CASCADE,
+        related_name="phones"
+    )
+    phone = models.CharField(max_length=20)
+    is_primary = models.BooleanField(default=False)
+    is_mailing = models.BooleanField(default=False)
+
+    def __str__(self):
+        return self.phone
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["contact", "phone"], name="uniq_contact_phone"),
+        ]
