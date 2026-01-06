@@ -4,6 +4,7 @@ from datetime import datetime
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.generics import ListAPIView
+from rest_framework.generics import RetrieveAPIView
 from rest_framework import filters
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -31,7 +32,32 @@ class LoadCompanyData(APIView):
     
 class GetCompanyData(ListAPIView):
     permission_classes = [IsAuthenticated]
-    queryset = Company.objects.all()
     serializer_class = CompanySerializer
     filter_backends = [filters.SearchFilter]
     search_fields = ["name_ru", "name_kz", "company_bin"]
+
+    def get_queryset(self):
+        return Company.objects.all()
+
+
+class CompanyDetailAPIView(RetrieveAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = CompanySerializer
+    lookup_field = "company_bin"
+
+    def get_queryset(self):
+        return (
+            Company.objects
+            .select_related("krp", "kse", "kfc", "kato", "industry", "primary_oked")
+            .prefetch_related(
+                "product",
+                "secondary_okeds",
+                "taxes",
+                "nds",
+                "goszakupsupplier",
+                "goszakupcustomer",
+                "program_participations__program",
+                "contacts__emails",
+                "contacts__phones",
+            )
+        )

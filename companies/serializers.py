@@ -1,5 +1,12 @@
 from rest_framework import serializers
-from .models import *
+from .models import Company, CompanyContact, ContactEmail, ContactPhone
+from programs.serializers import ProgramParticipationReadSerializer
+from metrics.serializers import (
+    TaxesSerializer,
+    NdsSerializer,
+    GosZakupSupplierSerializer,
+    GosZakupCustomerSerializer,
+)
 
 
 class CompanyBinSerializer(serializers.Serializer):
@@ -12,19 +19,40 @@ class CompanyBinSerializer(serializers.Serializer):
         return data
 
 
-class CompanySerializer(serializers.Serializer):
-    company_bin = serializers.CharField(required=False)
-    name_ru = serializers.CharField(required=False)
+class ContactEmailSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ContactEmail
+        fields = ["id", "email", "is_primary", "is_mailing"]
 
 
-    def validate(self, data):
-        try:
-            Company.objects.get(id=data.get("company_bin"))
-        except:
-            raise serializers.ValidationError("Компании с таким БИНом не существует")
+class ContactPhoneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ContactPhone
+        fields = ["id", "phone", "is_primary", "is_mailing"]
 
-        try:
-            Company.objects.get(id=data.get("name_ru"))
-        except:
-            raise serializers.ValidationError("Компании с таким БИНом не существует")
-        return data
+
+class CompanyContactSerializer(serializers.ModelSerializer):
+    emails = ContactEmailSerializer(many=True, read_only=True)
+    phones = ContactPhoneSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = CompanyContact
+        fields = ["id", "full_name", "position", "notes", "emails", "phones"]
+
+
+class CompanySerializer(serializers.ModelSerializer):
+    # контакты
+    contacts = CompanyContactSerializer(many=True, read_only=True)
+
+    # метрики
+    taxes = TaxesSerializer(many=True, read_only=True)
+    nds = NdsSerializer(many=True, read_only=True)
+    goszakupsupplier = GosZakupSupplierSerializer(many=True, read_only=True)
+    goszakupcustomer = GosZakupCustomerSerializer(many=True, read_only=True)
+
+    # программы
+    program_participations = ProgramParticipationReadSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Company
+        fields = "__all__"
