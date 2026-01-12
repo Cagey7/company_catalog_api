@@ -85,6 +85,8 @@ def load_company_data_by_bin(company_bin: str) -> dict:
 
     primary_oked = g(["basicInfo", "primaryOKED", "value"])
     secondary_okeds = g(["basicInfo", "secondaryOKED", "value"], default=None)
+    if secondary_okeds == [" "]:
+        secondary_okeds = None
 
     taxes = c_data.get("taxes", {}).get("taxGraph", []) or []
     nds_info = c_data.get("taxes", {}).get("ndsGraph", []) or []

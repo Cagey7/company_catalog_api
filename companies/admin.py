@@ -1,11 +1,12 @@
 from django.contrib import admin, messages
-from django.db.models import Count, Exists, OuterRef, Q
+from django.contrib.admin import SimpleListFilter
+from django.db.models import Count
 from django.urls import path, reverse
 from django.shortcuts import get_object_or_404, redirect
 from django.utils.html import format_html
 
 from .models import Company, CompanyContact, ContactEmail, ContactPhone
-from dictionaries.models import Industry
+from dictionaries.models import Industry, Kato, Oked, Krp
 
 from .services.prg_loader import load_company_data_by_bin, CompanyLoadError
 
@@ -27,6 +28,162 @@ class IndustryUsedFilter(admin.SimpleListFilter):
         if self.value():
             return queryset.filter(industry_id=self.value())
         return queryset
+
+
+class KatoDrilldownFilter(SimpleListFilter):
+    title = "КАТО (проваливание)"
+    parameter_name = "kato_node"
+
+    def lookups(self, request, model_admin):
+        """
+        Показываем список детей текущего узла.
+        Если узел не выбран — показываем корни.
+        """
+        node_id = request.GET.get(self.parameter_name)
+
+        current = None
+        if node_id:
+            try:
+                current = Kato.objects.only("id", "parent_id").get(pk=node_id)
+            except Kato.DoesNotExist:
+                current = None
+
+        items = []
+
+        # кнопка "вверх"
+        if current and current.parent_id:
+            items.append((str(current.parent_id), "⬆️ Вверх"))
+
+        # дети текущего узла (или корни)
+        if current:
+            qs = Kato.objects.filter(parent_id=current.id).order_by("kato_name")
+        else:
+            qs = Kato.objects.filter(parent__isnull=True).order_by("kato_name")
+
+        for k in qs:
+            items.append((str(k.id), k.kato_name))
+
+        return items
+
+    def queryset(self, request, queryset):
+        """
+        Когда выбран узел — показываем компании внутри этого узла:
+        kato.path startswith выбранный.path
+        """
+        node_id = self.value()
+        if not node_id:
+            return queryset
+
+        try:
+            selected = Kato.objects.only("path").get(pk=node_id)
+        except Kato.DoesNotExist:
+            return queryset
+
+        return queryset.filter(kato__path__startswith=selected.path)
+
+
+class OkedDrilldownFilter(SimpleListFilter):
+    title = "ОКЭД (проваливание)"
+    parameter_name = "oked_node"
+
+    def lookups(self, request, model_admin):
+        """
+        Показываем список детей текущего узла.
+        Если узел не выбран — показываем корни.
+        """
+        node_id = request.GET.get(self.parameter_name)
+
+        current = None
+        if node_id:
+            try:
+                current = Oked.objects.only("id", "parent_id").get(pk=node_id)
+            except Oked.DoesNotExist:
+                current = None
+
+        items = []
+
+        # кнопка "вверх"
+        if current and current.parent_id:
+            items.append((str(current.parent_id), "⬆️ Вверх"))
+
+        # дети текущего узла (или корни)
+        if current:
+            qs = Oked.objects.filter(parent_id=current.id).order_by("oked_name")
+        else:
+            qs = Oked.objects.filter(parent__isnull=True).order_by("oked_name")
+
+        for o in qs:
+            items.append((str(o.id), o.oked_name))
+
+        return items
+
+    def queryset(self, request, queryset):
+        """
+        Когда выбран узел — показываем компании внутри этого узла:
+        primary_oked.path startswith выбранный.path
+        """
+        node_id = self.value()
+        if not node_id:
+            return queryset
+
+        try:
+            selected = Oked.objects.only("path").get(pk=node_id)
+        except Oked.DoesNotExist:
+            return queryset
+
+        # ВАЖНО: поле в Company называется primary_oked (FK на Oked)
+        return queryset.filter(primary_oked__path__startswith=selected.path)
+
+class KrpDrilldownFilter(SimpleListFilter):
+    title = "КРП (проваливание)"
+    parameter_name = "krp_node"
+
+    def lookups(self, request, model_admin):
+        """
+        Показываем список детей текущего узла.
+        Если узел не выбран — показываем корни.
+        """
+        node_id = request.GET.get(self.parameter_name)
+
+        current = None
+        if node_id:
+            try:
+                current = Krp.objects.only("id", "parent_id").get(pk=node_id)
+            except Krp.DoesNotExist:
+                current = None
+
+        items = []
+
+        # кнопка "вверх"
+        if current and current.parent_id:
+            items.append((str(current.parent_id), "⬆️ Вверх"))
+
+        # дети текущего узла (или корни)
+        if current:
+            qs = Krp.objects.filter(parent_id=current.id).order_by("krp_name")
+        else:
+            qs = Krp.objects.filter(parent__isnull=True).order_by("krp_name")
+
+        for r in qs:
+            items.append((str(r.id), r.krp_name))
+
+        return items
+
+    def queryset(self, request, queryset):
+        """
+        Когда выбран узел — показываем компании внутри этого узла:
+        krp.path startswith выбранный.path
+        """
+        node_id = self.value()
+        if not node_id:
+            return queryset
+
+        try:
+            selected = Krp.objects.only("path").get(pk=node_id)
+        except Krp.DoesNotExist:
+            return queryset
+
+        return queryset.filter(krp__path__startswith=selected.path)
 
 
 # -------------------------
@@ -168,11 +325,10 @@ class CompanyAdmin(admin.ModelAdmin):
 
     list_filter = (
         IndustryUsedFilter,
-        "primary_oked",
+        KatoDrilldownFilter,
+        OkedDrilldownFilter,
+        KrpDrilldownFilter,
         "kfc",
-        "kse",
-        "krp",
-        "kato",
         "product",
     )
 
@@ -197,7 +353,9 @@ class CompanyAdmin(admin.ModelAdmin):
     )
 
     filter_horizontal = ("secondary_okeds", "product")
-    readonly_fields = ("updated", "load_data_button")
+
+    # ✅ добавили readonly поле региона
+    readonly_fields = ("updated", "load_data_button", "kato_region")
 
     inlines = (CompanyContactInline,)
 
@@ -218,6 +376,7 @@ class CompanyAdmin(admin.ModelAdmin):
             "fields": (
                 "address",
                 "kato",
+                "kato_region",  # ✅ показываем регион
             )
         }),
         ("Классификаторы", {
@@ -235,6 +394,29 @@ class CompanyAdmin(admin.ModelAdmin):
             "fields": ("updated",)
         }),
     )
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        # базовая оптимизация: подтягиваем kato одним join
+        return qs.select_related("kato", "industry", "primary_oked", "kfc", "kse", "krp")
+
+    @admin.display(description="Область/Город")
+    def kato_region(self, obj: Company):
+        """
+        Возвращает корневой КАТО (верхний parent) для выбранного obj.kato
+        """
+        k = getattr(obj, "kato", None)
+        if not k:
+            return "—"
+
+        # Поднимаемся вверх по дереву
+        while k.parent_id is not None:
+            k = k.parent
+
+        # Только название региона (корня)
+        return k.kato_name
+        # Если нужно "код — название", используй:
+        # return f"{k.kato_code} — {k.kato_name}"
 
     def get_urls(self):
         urls = super().get_urls()

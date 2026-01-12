@@ -4,7 +4,25 @@ from django.db import models
 class Krp(models.Model):
     krp_code = models.CharField(max_length=10, unique=True, verbose_name="Код КРП")
     krp_name = models.CharField(max_length=512, verbose_name="КРП название")
-    
+
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="children",
+        verbose_name="Родительский КРП",
+    )
+
+    path = models.CharField(
+        max_length=512,
+        db_index=True,
+        null=True,
+        blank=True,
+        verbose_name="Путь КРП",
+        default=None,
+    )
+
     def __str__(self):
         return f"{self.krp_name}"
 
@@ -61,6 +79,15 @@ class Kato(models.Model):
         verbose_name="Родительский КАТО"
     )
 
+    path = models.CharField(
+        max_length=512,
+        db_index=True,
+        null=True,
+        blank=True,
+        verbose_name="Путь КАТО",
+        default=None
+    )
+
     def __str__(self):
         return f"{self.kato_name}"
 
@@ -80,6 +107,15 @@ class Oked(models.Model):
         blank=True,
         related_name="children",
         verbose_name="Родительский ОКЭД"
+    )
+    
+    path = models.CharField(
+        max_length=512,
+        db_index=True,
+        null=True,
+        blank=True,
+        verbose_name="Путь ОКЭД",
+        default=None
     )
 
     def __str__(self):
