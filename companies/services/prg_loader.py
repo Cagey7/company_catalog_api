@@ -2,7 +2,7 @@ import requests
 from datetime import datetime
 from django.db import transaction
 
-from companies.models import Company
+from companies.models import Company, CompanyContact, ContactEmail, ContactPhone
 from metrics.models import Taxes, Nds, GosZakupSupplier, GosZakupCustomer
 from dictionaries.models import Krp, Kse, Kfc, Kato, Oked
 
@@ -94,16 +94,34 @@ def load_company_data_by_bin(company_bin: str) -> dict:
     gos_zakup_as_customer_info = g_data.get("asCustomer", []) or []
 
     with transaction.atomic():
-        krp = Krp.objects.get_or_create(krp_code=krp_code, defaults={"krp_name": krp_name})[0] if krp_code else None
-        kse = Kse.objects.get_or_create(kse_code=kse_code, defaults={"kse_name": kse_name})[0] if kse_code else None
-        kfc = Kfc.objects.get_or_create(kfc_code=kfc_code, defaults={"kfc_name": kfc_name})[0] if kfc_code else None
-        kato = Kato.objects.get_or_create(kato_code=kato_code, defaults={"kato_name": kato_name})[0] if kato_code else None
+        krp = Krp.objects.get_or_create(
+            krp_code=krp_code,
+            defaults={"krp_name": krp_name},
+        )[0] if krp_code else None
+
+        kse = Kse.objects.get_or_create(
+            kse_code=kse_code,
+            defaults={"kse_name": kse_name},
+        )[0] if kse_code else None
+
+        kfc = Kfc.objects.get_or_create(
+            kfc_code=kfc_code,
+            defaults={"kfc_name": kfc_name},
+        )[0] if kfc_code else None
+
+        kato = Kato.objects.get_or_create(
+            kato_code=kato_code,
+            defaults={"kato_name": kato_name},
+        )[0] if kato_code else None
 
         oked_obj = None
         if primary_oked:
             try:
                 oked_code, oked_name = primary_oked.split(" ", 1)
-                oked_obj = Oked.objects.get_or_create(oked_code=oked_code, defaults={"oked_name": oked_name})[0]
+                oked_obj = Oked.objects.get_or_create(
+                    oked_code=oked_code,
+                    defaults={"oked_name": oked_name},
+                )[0]
             except Exception:
                 oked_obj = None
 
@@ -135,8 +153,6 @@ def load_company_data_by_bin(company_bin: str) -> dict:
             company.pay_nds = pay_nds
             company.tax_risk = tax_risk
             company.address = address
-            company.phone_number = phone_number
-            company.email = email
             company.krp = krp
             company.kse = kse
             company.kfc = kfc
@@ -151,8 +167,40 @@ def load_company_data_by_bin(company_bin: str) -> dict:
                     oked_code, oked_name = oked_info.strip().split(maxsplit=1)
                 except ValueError:
                     oked_code, oked_name = oked_info.strip(), oked_info.strip()
-                oked2 = Oked.objects.get_or_create(oked_code=oked_code, defaults={"oked_name": oked_name})[0]
+
+                oked2 = Oked.objects.get_or_create(
+                    oked_code=oked_code,
+                    defaults={"oked_name": oked_name},
+                )[0]
                 company.secondary_okeds.add(oked2)
+
+        # =========================
+        # ✅ Контакты (телефон/почта) в модели CompanyContact + ContactPhone/ContactEmail
+        # =========================
+    contact, _ = CompanyContact.objects.get_or_create(
+        company=company,
+        notes="источник ba.prg.kz (Бизнес аналитик)",
+        defaults={
+            "full_name": None,
+            "position": None,
+        },
+    )
+
+    if phone_number:
+        ContactPhone.objects.create(
+            contact=contact,
+            phone=phone_number,
+            is_primary=True,
+            is_mailing=False,
+        )
+
+    if email:
+        ContactEmail.objects.create(
+            contact=contact,
+            email=email,
+            is_primary=True,
+            is_mailing=False,
+        )
 
         def latest_year(qs):
             v = qs.values_list("year", flat=True)
@@ -160,22 +208,22 @@ def load_company_data_by_bin(company_bin: str) -> dict:
 
         lt = latest_year(Taxes.objects.filter(company=company))
         for t in taxes:
-            if t["year"] > lt:
+            if t.get("year", 0) > lt:
                 Taxes.objects.create(company=company, year=t["year"], value=t["value"])
 
         ln = latest_year(Nds.objects.filter(company=company))
         for n in nds_info:
-            if n["year"] > ln:
+            if n.get("year", 0) > ln:
                 Nds.objects.create(company=company, year=n["year"], value=n["value"])
 
         lgs = latest_year(GosZakupSupplier.objects.filter(company=company))
         for s in gos_zakup_as_supplier_info:
-            if s["year"] > lgs:
+            if s.get("year", 0) > lgs:
                 GosZakupSupplier.objects.create(company=company, year=s["year"], value=s["value"])
 
         lgc = latest_year(GosZakupCustomer.objects.filter(company=company))
         for c in gos_zakup_as_customer_info:
-            if c["year"] > lgc:
+            if c.get("year", 0) > lgc:
                 GosZakupCustomer.objects.create(company=company, year=c["year"], value=c["value"])
 
     return {

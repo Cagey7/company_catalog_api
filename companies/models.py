@@ -10,8 +10,6 @@ class Company(models.Model):
     pay_nds = models.BooleanField(null=True, verbose_name="Плательщик НДС")
     tax_risk = models.CharField(max_length=32, null=True, verbose_name="Степень риска налогоплательщика")
     address = models.CharField(max_length=1024, null=True, blank=True, verbose_name="Адрес организации на русском")
-    phone_number = models.CharField(max_length=128, null=True, blank=True, verbose_name="Номер телефона")
-    email = models.CharField(max_length=255, null=True, blank=True, verbose_name="Электронная почта")
     krp = models.ForeignKey("dictionaries.Krp", on_delete=models.PROTECT, null=True, blank=True, verbose_name="КРП")
     kse = models.ForeignKey("dictionaries.Kse", on_delete=models.PROTECT, null=True, blank=True, verbose_name="КСЕ")
     kfc = models.ForeignKey("dictionaries.Kfc", on_delete=models.PROTECT, null=True, blank=True, verbose_name="КФС")

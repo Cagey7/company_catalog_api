@@ -336,9 +336,7 @@ class CompanyAdmin(admin.ModelAdmin):
         "name_ru",
         "name_kz",
         "company_bin",
-        "ceo",
-        "phone_number",
-        "email",
+        "ceo"
     )
 
     autocomplete_fields = (
@@ -367,8 +365,6 @@ class CompanyAdmin(admin.ModelAdmin):
                 "company_bin",
                 "register_date",
                 "ceo",
-                "phone_number",
-                "email",
                 "load_data_button",
             )
         }),
