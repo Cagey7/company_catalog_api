@@ -20,7 +20,7 @@ class Migration(migrations.Migration):
                 ('register_date', models.DateField(null=True, verbose_name='Время создания организации')),
                 ('ceo', models.CharField(max_length=512, null=True, verbose_name='Руководитель организации')),
                 ('company_bin', models.CharField(max_length=12, unique=True, verbose_name='БИН')),
-                ('address', models.CharField(blank=True, max_length=1024, null=True, verbose_name='Адрес организации на русском')),
+                ('address', models.CharField(blank=True, max_length=1024, null=True, verbose_name='Адрес организации')),
                 ('phone_number', models.CharField(blank=True, max_length=128, null=True, verbose_name='Номер телефона')),
                 ('email', models.CharField(blank=True, max_length=255, null=True, verbose_name='Электронная почта')),
                 ('updated', models.DateTimeField(auto_now=True)),

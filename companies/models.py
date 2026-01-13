@@ -9,13 +9,14 @@ class Company(models.Model):
     company_bin = models.CharField(max_length=12, unique=True, verbose_name="БИН")
     pay_nds = models.BooleanField(null=True, verbose_name="Плательщик НДС")
     tax_risk = models.CharField(max_length=32, null=True, verbose_name="Степень риска налогоплательщика")
-    address = models.CharField(max_length=1024, null=True, blank=True, verbose_name="Адрес организации на русском")
+    address = models.CharField(max_length=1024, null=True, blank=True, verbose_name="Адрес организации")
     krp = models.ForeignKey("dictionaries.Krp", on_delete=models.PROTECT, null=True, blank=True, verbose_name="КРП")
     kse = models.ForeignKey("dictionaries.Kse", on_delete=models.PROTECT, null=True, blank=True, verbose_name="КСЕ")
     kfc = models.ForeignKey("dictionaries.Kfc", on_delete=models.PROTECT, null=True, blank=True, verbose_name="КФС")
     kato = models.ForeignKey("dictionaries.Kato", on_delete=models.PROTECT, null=True, blank=True, verbose_name="КАТО")
     product = models.ManyToManyField("dictionaries.Product", blank=True)
     industry = models.ForeignKey("dictionaries.Industry", on_delete=models.PROTECT, null=True, blank=True)
+    certificates = models.ManyToManyField("companies.Certificate", blank=True, related_name="companies", verbose_name="Сертификаты")
     primary_oked = models.ForeignKey("dictionaries.Oked", on_delete=models.PROTECT, null=True, blank=True, related_name="primary_oked", verbose_name="ОКЭД")
     secondary_okeds = models.ManyToManyField("dictionaries.Oked", blank=True, related_name="secondary_okeds")
     updated = models.DateTimeField(auto_now=True)
@@ -41,7 +42,21 @@ class CompanyContact(models.Model):
     notes = models.TextField(null=True, blank=True)
 
     def __str__(self):
-        return self.full_name or f"Контакт #{self.id}"
+        parts = []
+
+        if self.full_name:
+            parts.append(self.full_name)
+
+        if self.position:
+            parts.append(self.position)
+
+        if parts:
+            return " — ".join(parts)
+
+        if self.notes:
+            return self.notes
+
+        return f"Контакт #{self.id}"
 
     class Meta:
         db_table = "company_contacts"
@@ -84,3 +99,15 @@ class ContactPhone(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["contact", "phone"], name="uniq_contact_phone"),
         ]
+
+
+class Certificate(models.Model):
+    name = models.CharField(max_length=255, unique=True, verbose_name="Название сертификата")
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        db_table = "certificates"
+        verbose_name = "Сертификат"
+        verbose_name_plural = "Сертификаты"

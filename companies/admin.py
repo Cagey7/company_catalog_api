@@ -5,8 +5,9 @@ from django.urls import path, reverse
 from django.shortcuts import get_object_or_404, redirect
 from django.utils.html import format_html
 
-from .models import Company, CompanyContact, ContactEmail, ContactPhone
+from .models import Company, CompanyContact, ContactEmail, ContactPhone, Certificate
 from dictionaries.models import Industry, Kato, Oked, Krp
+from programs.models import Program, ProgramParticipation
 
 from .services.prg_loader import load_company_data_by_bin, CompanyLoadError
 
@@ -29,6 +30,103 @@ class IndustryUsedFilter(admin.SimpleListFilter):
             return queryset.filter(industry_id=self.value())
         return queryset
 
+
+class ProgramParticipationDrilldownFilter(admin.SimpleListFilter):
+    title = "Программы / Год участия"
+    parameter_name = "program_part"  # один параметр в URL
+
+    # Формат value:
+    #   "p:<program_id>"                -> выбрана программа
+    #   "py:<program_id>:<year>"        -> выбрана программа + год
+
+    def lookups(self, request, model_admin):
+        raw = request.GET.get(self.parameter_name)  # текущее значение
+
+        # --- уровень 1: список программ ---
+        if not raw or not raw.startswith("p:"):
+            qs = (
+                Program.objects
+                .annotate(cnt=Count("participants"))
+                .filter(cnt__gt=0)
+                .order_by("name")
+            )
+            return [(f"p:{p.id}", p.name) for p in qs]
+
+        # --- уровень 2: список годов для выбранной программы ---
+        try:
+            program_id = int(raw.split(":")[1])
+        except (ValueError, IndexError):
+            return []
+
+        items = []
+        items.append(("__back__", "⬆️ Назад к программам"))
+
+        years = (
+            ProgramParticipation.objects
+            .filter(program_id=program_id)
+            .exclude(year__isnull=True)
+            .values_list("year", flat=True)
+            .distinct()
+            .order_by("-year")
+        )
+
+        for y in years:
+            items.append((f"py:{program_id}:{y}", str(y)))
+
+        # Если у программы нет годов (все null) — можно дать “Без года”
+        if len(items) == 1:
+            items.append((f"py:{program_id}:__null__", "Без года"))
+
+        return items
+
+    def queryset(self, request, queryset):
+        raw = self.value()
+        if not raw:
+            return queryset
+
+        # кнопка "назад"
+        if raw == "__back__":
+            return queryset
+
+        # выбран уровень "программа"
+        if raw.startswith("p:"):
+            try:
+                program_id = int(raw.split(":")[1])
+            except (ValueError, IndexError):
+                return queryset
+            return queryset.filter(
+                program_participations__program_id=program_id
+            ).distinct()
+
+        # выбран уровень "программа + год"
+        if raw.startswith("py:"):
+            parts = raw.split(":")
+            if len(parts) != 3:
+                return queryset
+
+            try:
+                program_id = int(parts[1])
+            except ValueError:
+                return queryset
+
+            year_part = parts[2]
+            if year_part == "__null__":
+                return queryset.filter(
+                    program_participations__program_id=program_id,
+                    program_participations__year__isnull=True,
+                ).distinct()
+
+            try:
+                year = int(year_part)
+            except ValueError:
+                return queryset
+
+            return queryset.filter(
+                program_participations__program_id=program_id,
+                program_participations__year=year,
+            ).distinct()
+
+        return queryset
 
 class KatoDrilldownFilter(SimpleListFilter):
     title = "КАТО (проваливание)"
@@ -202,6 +300,11 @@ class ContactPhoneInline(admin.TabularInline):
     fields = ("phone", "is_primary", "is_mailing")
     ordering = ("-is_primary", "-is_mailing", "id")
 
+class ProgramParticipationInline(admin.TabularInline):
+    model = ProgramParticipation
+    extra = 0
+    autocomplete_fields = ("program",)   # удобно, если программ много
+    fields = ("program", "year")
 
 # -------------------------
 # Filters for mailing flags
@@ -295,16 +398,32 @@ class CompanyContactAdmin(admin.ModelAdmin):
 class CompanyContactInline(admin.TabularInline):
     model = CompanyContact
     extra = 0
-    fields = ("full_name", "position", "contact_link")
-    readonly_fields = ("contact_link",)
+    can_delete = False
+
+    fields = ("contact_link", "primary_phone", "primary_email")
+    readonly_fields = ("contact_link", "primary_phone", "primary_email")
     show_change_link = False
 
-    @admin.display(description="Открыть")
+    @admin.display(description="Контакт")
     def contact_link(self, obj: CompanyContact):
         if not obj or not obj.pk:
             return "-"
         url = reverse("admin:companies_companycontact_change", args=[obj.pk])
-        return format_html('<a href="{}">Открыть</a>', url)
+        return format_html('<a href="{}">{}</a>', url, str(obj))
+
+    @admin.display(description="Телефон")
+    def primary_phone(self, obj: CompanyContact):
+        if not obj or not obj.pk:
+            return "-"
+        p = obj.phones.filter(is_primary=True).first() or obj.phones.order_by("id").first()
+        return p.phone if p else "-"
+
+    @admin.display(description="Email")
+    def primary_email(self, obj: CompanyContact):
+        if not obj or not obj.pk:
+            return "-"
+        e = obj.emails.filter(is_primary=True).first() or obj.emails.order_by("id").first()
+        return e.email if e else "-"
 
 
 # -------------------------
@@ -317,9 +436,6 @@ class CompanyAdmin(admin.ModelAdmin):
     list_display = (
         "name_ru",
         "company_bin",
-        "industry",
-        "primary_oked",
-        "kato",
         "updated",
     )
 
@@ -328,6 +444,7 @@ class CompanyAdmin(admin.ModelAdmin):
         KatoDrilldownFilter,
         OkedDrilldownFilter,
         KrpDrilldownFilter,
+        ProgramParticipationDrilldownFilter,
         "kfc",
         "product",
     )
@@ -348,14 +465,15 @@ class CompanyAdmin(admin.ModelAdmin):
         "primary_oked",
         "secondary_okeds",
         "product",
+        "certificates",
     )
 
-    filter_horizontal = ("secondary_okeds", "product")
+    filter_horizontal = ("secondary_okeds", "product", "certificates")
 
     # ✅ добавили readonly поле региона
     readonly_fields = ("updated", "load_data_button", "kato_region")
 
-    inlines = (CompanyContactInline,)
+    inlines = (CompanyContactInline, ProgramParticipationInline)
 
     fieldsets = (
         ("Основная информация", {
@@ -384,6 +502,7 @@ class CompanyAdmin(admin.ModelAdmin):
                 "primary_oked",
                 "secondary_okeds",
                 "product",
+                "certificates",
             )
         }),
         ("Системные поля", {
@@ -394,7 +513,14 @@ class CompanyAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         # базовая оптимизация: подтягиваем kato одним join
-        return qs.select_related("kato", "industry", "primary_oked", "kfc", "kse", "krp")
+        return qs.select_related("kato", "industry", "primary_oked", "kfc", "kse", "krp").prefetch_related("certificates","program_participations__program",)
+
+
+    @admin.display(description="Сертификаты")
+    def certificates_list(self, obj: Company):
+        names = list(obj.certificates.values_list("name", flat=True))
+        return ", ".join(names) if names else "—"
+
 
     @admin.display(description="Область/Город")
     def kato_region(self, obj: Company):
@@ -453,3 +579,9 @@ class CompanyAdmin(admin.ModelAdmin):
             self.message_user(request, f"Неожиданная ошибка: {e}", level=messages.ERROR)
 
         return redirect(reverse("admin:companies_company_change", args=[pk]))
+
+@admin.register(Certificate)
+class CertificateAdmin(admin.ModelAdmin):
+    list_display = ("name",)
+    search_fields = ("name",)
+    
