@@ -4,12 +4,16 @@ from django.db.models import Count
 from django.urls import path, reverse
 from django.shortcuts import get_object_or_404, redirect
 from django.utils.html import format_html
-
 from .models import Company, CompanyContact, ContactEmail, ContactPhone, Certificate
-from dictionaries.models import Industry, Kato, Oked, Krp
+from dictionaries.models import Industry, Kato, Oked, Krp, Product
 from programs.models import Program, ProgramParticipation
 
+from .services.excel_builder import excel_builder
+
 from .services.prg_loader import load_company_data_by_bin, CompanyLoadError
+from django.http import HttpResponse
+from openpyxl import Workbook
+from django.urls import path
 
 
 class IndustryUsedFilter(admin.SimpleListFilter):
@@ -548,8 +552,14 @@ class CompanyAdmin(admin.ModelAdmin):
                 self.admin_site.admin_view(self.load_data_view),
                 name="companies_company_load_data",
             ),
+            path(
+                "export-xlsx/",
+                self.admin_site.admin_view(self.export_xlsx),
+                name="companies_company_export_xlsx",
+            ),
         ]
         return custom_urls + urls
+
 
     def load_data_button(self, obj):
         if not obj or not obj.pk:
@@ -580,8 +590,104 @@ class CompanyAdmin(admin.ModelAdmin):
 
         return redirect(reverse("admin:companies_company_change", args=[pk]))
 
+
+    change_list_template = "admin/program_participation_change_list.html"
+
+    def export_xlsx(self, request):
+        cl = self.get_changelist_instance(request)
+
+        companies_qs = (
+            cl.get_queryset(request)
+            .select_related("industry", "kato")
+            .prefetch_related("contacts__emails", "contacts__phones")
+        )
+        filters_info = get_export_filters_values(request)
+        wb = excel_builder(companies_qs, filters_info)
+
+        response = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        
+        response["Content-Disposition"] = 'attachment; filename="companies.xlsx"'
+
+        wb.save(response)
+        return response
+
+
 @admin.register(Certificate)
 class CertificateAdmin(admin.ModelAdmin):
     list_display = ("name",)
     search_fields = ("name",)
-    
+
+
+def get_export_filters_raw(request):
+    return {
+        k: v
+        for k, v in request.GET.items()
+        if v not in ("", None)
+    }
+
+
+def _first_present(raw, *keys):
+    for k in keys:
+        if k in raw:
+            return raw[k]
+    return None
+
+
+def _get_name_by_pk(model, pk, field):
+    return (
+        model.objects
+        .filter(pk=pk)
+        .values_list(field, flat=True)
+        .first()
+    )
+
+
+def get_export_filters_values(request):
+    raw = get_export_filters_raw(request)
+    values = {}
+
+    # --- Industry ---
+    industry_id = _first_present(raw, "industry", "industry__id__exact", "industry__exact")
+    if industry_id:
+        values["industry"] = _get_name_by_pk(Industry, industry_id, "name")
+
+    # --- KATO ---
+    kato_id = _first_present(raw, "kato_node", "kato_node__id__exact", "kato_node__exact")
+    if kato_id:
+        values["kato_node"] = _get_name_by_pk(Kato, kato_id, "kato_name")
+
+    # --- OKED ---
+    oked_id = _first_present(raw, "oked_node", "oked_node__id__exact", "oked_node__exact")
+    if oked_id:
+        values["oked_node"] = _get_name_by_pk(Oked, oked_id, "oked_name")
+
+    # --- KRP ---
+    krp_id = _first_present(raw, "krp_node", "krp_node__id__exact", "krp_node__exact")
+    if krp_id:
+        values["krp_node"] = _get_name_by_pk(Krp, krp_id, "krp_name")
+
+    # --- PRODUCT (ManyToMany) ---
+    product_id = _first_present(raw, "product", "product__id__exact", "product__exact")
+    if product_id:
+        values["product"] = _get_name_by_pk(Product, product_id, "name")
+
+    # --- Program + year ---
+    program_part = raw.get("program_part")
+    if program_part:
+        if program_part.startswith("p:"):
+            _, program_id = program_part.split(":")
+            values["program_part"] = {
+                "program": _get_name_by_pk(Program, program_id, "name")
+            }
+
+        elif program_part.startswith("py:"):
+            _, program_id, year = program_part.split(":")
+            values["program_part"] = {
+                "program": _get_name_by_pk(Program, program_id, "name"),
+                "year": int(year) if year.isdigit() else year,
+            }
+
+    return values
+
