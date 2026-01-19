@@ -529,6 +529,7 @@ class CompanyAdmin(admin.ModelAdmin):
                 "company_bin",
                 "register_date",
                 "ceo",
+                "product_description",
                 "load_data_button",
             )
         }),
