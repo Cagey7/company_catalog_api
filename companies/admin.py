@@ -288,6 +288,47 @@ class KrpDrilldownFilter(SimpleListFilter):
         return queryset.filter(krp__path__startswith=selected.path)
 
 
+class ProductDrilldownFilter(SimpleListFilter):
+    title = "Товары (проваливание)"
+    parameter_name = "product_node"
+
+    def lookups(self, request, model_admin):
+        node_id = request.GET.get(self.parameter_name)
+
+        current = None
+        if node_id:
+            try:
+                current = Product.objects.only("id", "parent_id").get(pk=node_id)
+            except Product.DoesNotExist:
+                current = None
+
+        items = []
+
+        if current and current.parent_id:
+            items.append((str(current.parent_id), "⬆️ Вверх"))
+
+        if current:
+            qs = Product.objects.filter(parent_id=current.id).order_by("name")
+        else:
+            qs = Product.objects.filter(parent__isnull=True).order_by("name")
+
+        for p in qs:
+            items.append((str(p.id), p.name))
+
+        return items
+
+    def queryset(self, request, queryset):
+        node_id = self.value()
+        if not node_id:
+            return queryset
+
+        try:
+            selected = Product.objects.only("path").get(pk=node_id)
+        except Product.DoesNotExist:
+            return queryset
+
+        return queryset.filter(product__path__startswith=selected.path).distinct()
+
 # -------------------------
 # Inlines for contact details
 # -------------------------
@@ -449,8 +490,8 @@ class CompanyAdmin(admin.ModelAdmin):
         OkedDrilldownFilter,
         KrpDrilldownFilter,
         ProgramParticipationDrilldownFilter,
+        ProductDrilldownFilter,
         "kfc",
-        "product",
     )
 
     search_fields = (
@@ -487,6 +528,7 @@ class CompanyAdmin(admin.ModelAdmin):
                 "company_bin",
                 "register_date",
                 "ceo",
+                "product_description",
                 "load_data_button",
             )
         }),
@@ -648,46 +690,33 @@ def get_export_filters_values(request):
     raw = get_export_filters_raw(request)
     values = {}
 
-    # --- Industry ---
     industry_id = _first_present(raw, "industry", "industry__id__exact", "industry__exact")
     if industry_id:
         values["industry"] = _get_name_by_pk(Industry, industry_id, "name")
 
-    # --- KATO ---
     kato_id = _first_present(raw, "kato_node", "kato_node__id__exact", "kato_node__exact")
     if kato_id:
         values["kato_node"] = _get_name_by_pk(Kato, kato_id, "kato_name")
 
-    # --- OKED ---
     oked_id = _first_present(raw, "oked_node", "oked_node__id__exact", "oked_node__exact")
     if oked_id:
         values["oked_node"] = _get_name_by_pk(Oked, oked_id, "oked_name")
 
-    # --- KRP ---
     krp_id = _first_present(raw, "krp_node", "krp_node__id__exact", "krp_node__exact")
     if krp_id:
         values["krp_node"] = _get_name_by_pk(Krp, krp_id, "krp_name")
 
-    # --- PRODUCT (ManyToMany) ---
-    product_id = _first_present(raw, "product", "product__id__exact", "product__exact")
-    if product_id:
-        values["product"] = _get_name_by_pk(Product, product_id, "name")
+    product_node_id = _first_present(raw, "product_node", "product_node__id__exact", "product_node__exact")
+    if product_node_id:
+        values["product_node"] = _get_name_by_pk(Product, product_node_id, "name")
 
-    # --- Program + year ---
     program_part = raw.get("program_part")
     if program_part:
         if program_part.startswith("p:"):
             _, program_id = program_part.split(":")
-            values["program_part"] = {
-                "program": _get_name_by_pk(Program, program_id, "name")
-            }
-
+            values["program_part"] = {"program": _get_name_by_pk(Program, program_id, "name")}
         elif program_part.startswith("py:"):
             _, program_id, year = program_part.split(":")
-            values["program_part"] = {
-                "program": _get_name_by_pk(Program, program_id, "name"),
-                "year": int(year) if year.isdigit() else year,
-            }
+            values["program_part"] = {"program": _get_name_by_pk(Program, program_id, "name"), "year": int(year) if year.isdigit() else year}
 
     return values
-

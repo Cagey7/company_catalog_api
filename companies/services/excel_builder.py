@@ -6,6 +6,7 @@ from dictionaries.models import Kato  # важно: нужен доступ к �
 
 
 def build_excel_title(filters):
+    print(filters)
     parts = []
 
     if filters.get("kato_node"):
@@ -17,8 +18,8 @@ def build_excel_title(filters):
     if filters.get("industry"):
         parts.append(filters["industry"])
 
-    if filters.get("product"):
-        parts.append(filters["product"])
+    if filters.get("product_node"):
+        parts.append(filters["product_node"])
 
     program = filters.get("program_part")
     if isinstance(program, dict):

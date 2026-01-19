@@ -143,16 +143,43 @@ class Industry(models.Model):
 
 
 class Product(models.Model):
-    name = models.CharField(max_length=255, unique=True)
-    # parent = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, related_name="children")
+    name = models.CharField(max_length=255, unique=True, verbose_name="Наименование продукта")
+    parent = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, related_name="children", verbose_name="Родительский продукт")
+    path = models.CharField(max_length=512, db_index=True, null=True, blank=True, default=None, verbose_name="Путь продукта")
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+
+        if self.parent and self.parent.path:
+            parent_path = self.parent.path.rstrip("/")
+            new_path = f"{parent_path}/{self.name}"
+        elif self.parent:
+            new_path = f"{self.parent.name}"
+        else:
+            new_path = self.name
+
+        if self.path != new_path:
+            self.path = new_path
+            super().save(update_fields=["path"])
 
     def __str__(self):
         return self.name
 
     class Meta:
         db_table = "product"
-        verbose_name = "Тип товара"
-        verbose_name_plural = "Типы товаров"
+        verbose_name = "Продукт"
+        verbose_name_plural = "Продукты"
+        ordering = ["path"]
+
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        db_table = "product"
+        verbose_name = "Продукт"
+        verbose_name_plural = "Продукты"
+        ordering = ["path"]
 
 
 

@@ -16,6 +16,7 @@ class Company(models.Model):
     kato = models.ForeignKey("dictionaries.Kato", on_delete=models.PROTECT, null=True, blank=True, verbose_name="КАТО")
     product = models.ManyToManyField("dictionaries.Product", blank=True)
     industry = models.ForeignKey("dictionaries.Industry", on_delete=models.PROTECT, null=True, blank=True)
+    product_description = models.TextField(null=True,blank=True,verbose_name="Описание продукции")
     certificates = models.ManyToManyField("companies.Certificate", blank=True, related_name="companies", verbose_name="Сертификаты")
     primary_oked = models.ForeignKey("dictionaries.Oked", on_delete=models.PROTECT, null=True, blank=True, related_name="primary_oked", verbose_name="ОКЭД")
     secondary_okeds = models.ManyToManyField("dictionaries.Oked", blank=True, related_name="secondary_okeds")
