@@ -20,6 +20,7 @@ class Company(models.Model):
     certificates = models.ManyToManyField("companies.Certificate", blank=True, related_name="companies", verbose_name="Сертификаты")
     primary_oked = models.ForeignKey("dictionaries.Oked", on_delete=models.PROTECT, null=True, blank=True, related_name="primary_oked", verbose_name="ОКЭД")
     secondary_okeds = models.ManyToManyField("dictionaries.Oked", blank=True, related_name="secondary_okeds")
+    tnveds = models.ManyToManyField("dictionaries.Tnved", blank=True, related_name="companies", verbose_name="ТН ВЭД")
     updated = models.DateTimeField(auto_now=True)
     
     def __str__(self):

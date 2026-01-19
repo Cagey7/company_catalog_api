@@ -5,7 +5,7 @@ from django.urls import path, reverse
 from django.shortcuts import get_object_or_404, redirect
 from django.utils.html import format_html
 from .models import Company, CompanyContact, ContactEmail, ContactPhone, Certificate
-from dictionaries.models import Industry, Kato, Oked, Krp, Product
+from dictionaries.models import Industry, Kato, Oked, Krp, Product, Tnved
 from programs.models import Program, ProgramParticipation
 
 from .services.excel_builder import excel_builder
@@ -511,9 +511,10 @@ class CompanyAdmin(admin.ModelAdmin):
         "secondary_okeds",
         "product",
         "certificates",
+        "tnveds", 
     )
 
-    filter_horizontal = ("secondary_okeds", "product", "certificates")
+    filter_horizontal = ("secondary_okeds", "product", "certificates", "tnveds")
 
     # ✅ добавили readonly поле региона
     readonly_fields = ("updated", "load_data_button", "kato_region")
@@ -528,7 +529,6 @@ class CompanyAdmin(admin.ModelAdmin):
                 "company_bin",
                 "register_date",
                 "ceo",
-                "product_description",
                 "load_data_button",
             )
         }),
@@ -548,6 +548,7 @@ class CompanyAdmin(admin.ModelAdmin):
                 "primary_oked",
                 "secondary_okeds",
                 "product",
+                "tnveds",
                 "certificates",
             )
         }),

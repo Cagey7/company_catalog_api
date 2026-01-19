@@ -194,17 +194,3 @@ class Tnved(models.Model):
         db_table = "tnved"
         verbose_name = "ТН ВЭДы"
         verbose_name_plural = "ТН ВЭДы"
-
-
-class CompanyProduct(models.Model):
-    company = models.ForeignKey("companies.Company", on_delete=models.CASCADE, related_name="products", verbose_name="Организация")
-    tnved = models.ForeignKey("dictionaries.Tnved", on_delete=models.PROTECT, related_name="companies", verbose_name="ТН ВЭД")
-
-    def __str__(self):
-        return f"{self.company} — {self.tnved}"
-
-    class Meta:
-        db_table = "company_products"
-        verbose_name = "Продукция компании"
-        verbose_name_plural = "Продукция компаний"
-        unique_together = ("company", "tnved")

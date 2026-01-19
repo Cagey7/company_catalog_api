@@ -2,8 +2,7 @@ from django.contrib import admin
 
 from .models import (
     Krp, Kse, Kfc, Kato, Oked,
-    Industry, Product, Tnved,
-    CompanyProduct,
+    Industry, Product, Tnved
 )
 
 
@@ -51,10 +50,3 @@ class ProductAdmin(admin.ModelAdmin):
 class TnvedAdmin(admin.ModelAdmin):
     list_display = ("tn_ved_code", "tn_ved_name")
     search_fields = ("tn_ved_code", "tn_ved_name")
-
-
-@admin.register(CompanyProduct)
-class CompanyProductAdmin(admin.ModelAdmin):
-    list_display = ("company", "tnved")
-    search_fields = ("company__tn_ved_name", "company__company_bin", "tnved__tn_ved_code", "tnved__tn_ved_name")
-    autocomplete_fields = ("company", "tnved")
