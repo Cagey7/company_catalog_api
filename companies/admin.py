@@ -1,3 +1,6 @@
+import re
+from datetime import datetime
+from urllib.parse import quote
 from django.contrib import admin, messages
 from django.contrib.admin import SimpleListFilter
 from django.db.models import Count
@@ -638,21 +641,52 @@ class CompanyAdmin(admin.ModelAdmin):
     change_list_template = "admin/program_participation_change_list.html"
 
     def export_xlsx(self, request):
+        # 1) забираем выбранные поля и просто печатаем
+        export_fields = request.GET.getlist("fields")
+        print("EXPORT FIELDS:", export_fields)
+
+        # 2) убираем fields из GET, чтобы админка не пыталась фильтровать по "fields"
+        get_params = request.GET.copy()
+        get_params.pop("fields", None)
+        request.GET = get_params
+
+        # 3) дальше твой код как есть
         cl = self.get_changelist_instance(request)
 
         companies_qs = (
             cl.get_queryset(request)
-            .select_related("industry", "kato")
-            .prefetch_related("contacts__emails", "contacts__phones")
+            .select_related(
+            "industry",
+            "kato",
+            "primary_oked",
+            "kfc",
+            "kse",
+            "krp"
+            )
+            .prefetch_related(
+            "contacts__emails",
+            "contacts__phones",
+            "certificates",
+            "secondary_okeds",
+            "product",
+            "tnveds",
+            "program_participations__program"
+            )
         )
         filters_info = get_export_filters_values(request)
+        filename = build_export_filename(filters_info)
         wb = excel_builder(companies_qs, filters_info)
 
         response = HttpResponse(
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-        
-        response["Content-Disposition"] = 'attachment; filename="companies.xlsx"'
+
+        ascii_fallback = "компании.xlsx"
+        quoted = quote(filename)
+        response["Content-Disposition"] = (
+            f'attachment; filename="{ascii_fallback}"; '
+            f"filename*=UTF-8''{quoted}"
+        )
 
         wb.save(response)
         return response
@@ -722,3 +756,34 @@ def get_export_filters_values(request):
             values["program_part"] = {"program": _get_name_by_pk(Program, program_id, "name"), "year": int(year) if year.isdigit() else year}
 
     return values
+
+
+def build_export_filename(filters_info, prefix="companies"):
+    parts = []
+
+    for key in ("industry", "kato_node", "krp_node", "product_node"):
+        val = filters_info.get(key)
+        if val:
+            parts.append(val)
+
+    program = filters_info.get("program_part")
+    if isinstance(program, dict):
+        name = program.get("program")
+        year = program.get("year")
+        if name and year:
+            parts.append(f"{name}_{year}")
+        elif name:
+            parts.append(name)
+
+    if not parts:
+        base = prefix
+    else:
+        base = prefix + "_" + "_".join(parts)
+
+    # 🔥 чистим имя файла от мусора
+    base = base.lower()
+    base = re.sub(r"[^\w\d\-_. ]+", "", base)   # убираем спецсимволы
+    base = re.sub(r"\s+", "_", base)            # пробелы → _
+    base = base.strip("_")
+
+    return f"{base}.xlsx"

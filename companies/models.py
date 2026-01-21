@@ -90,7 +90,7 @@ class ContactPhone(models.Model):
         on_delete=models.CASCADE,
         related_name="phones"
     )
-    phone = models.CharField(max_length=20)
+    phone = models.CharField(max_length=40)
     is_primary = models.BooleanField(default=False)
     is_mailing = models.BooleanField(default=False)
 

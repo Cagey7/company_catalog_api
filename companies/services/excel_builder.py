@@ -6,7 +6,7 @@ from dictionaries.models import Kato  # важно: нужен доступ к �
 
 
 def build_excel_title(filters):
-    print(filters)
+    
     parts = []
 
     if filters.get("kato_node"):
@@ -97,9 +97,6 @@ def excel_builder(companies_qs, filters_info):
     c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
     ws.row_dimensions[1].height = 32
 
-    # spacer
-    ws.row_dimensions[2].height = 6
-
     # -------------------------
     # Header row
     # -------------------------
@@ -164,7 +161,7 @@ def excel_builder(companies_qs, filters_info):
             else:
                 contact_chunks.append(header)
 
-        return " | ".join(contact_chunks)
+        return "\n ".join(contact_chunks)
 
     def format_products(company):
         products = company.product.all()
@@ -180,14 +177,13 @@ def excel_builder(companies_qs, filters_info):
     # -------------------------
     # Data rows
     # -------------------------
-    row_idx = 4
+    row_idx = 3
     for company in companies_qs:
-        ws.append([
-            company.name_ru or "",
-            format_kato_region_name(company),  # ✅ теперь название региона по "коду с нулями"
-            format_products(company),
-            format_contacts(company),
-        ])
+        row_idx += 1
+        ws.cell(row=row_idx, column=1, value=company.name_ru or "")
+        ws.cell(row=row_idx, column=2, value=format_kato_region_name(company))
+        ws.cell(row=row_idx, column=3, value=format_products(company))
+        ws.cell(row=row_idx, column=4, value=format_contacts(company))
 
         for col_idx in range(1, ncols + 1):
             cell = ws.cell(row=row_idx, column=col_idx)
@@ -195,7 +191,6 @@ def excel_builder(companies_qs, filters_info):
             cell.border = border_thin
 
         ws.row_dimensions[row_idx].height = 48
-        row_idx += 1
 
     return wb
 
