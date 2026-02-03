@@ -675,7 +675,7 @@ class CompanyAdmin(admin.ModelAdmin):
         )
         filters_info = get_export_filters_values(request)
         filename = build_export_filename(filters_info)
-        wb = excel_builder(companies_qs, filters_info)
+        wb = excel_builder(companies_qs, filters_info, export_fields)
 
         response = HttpResponse(
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"

@@ -62,8 +62,118 @@ def format_kato_region_name(company):
     # если по какой-то причине не нашли — вернём хотя бы код
     return region_name or region_code
 
+def format_contacts(company):
+    def sort_primary_first(items):
+        # items: iterable with attr is_primary (bool)
+        return sorted(items, key=lambda x: (not getattr(x, "is_primary", False), getattr(x, "id", 0)))
 
-def excel_builder(companies_qs, filters_info):
+    contact_chunks = []
+
+    for c in company.contacts.all():
+        name = (c.full_name or "").strip()
+        pos = (c.position or "").strip()
+        notes = (getattr(c, "notes", "") or "").strip()
+
+        # Заголовок контакта
+        if name:
+            header = name
+            if pos:
+                header = f"{header} - {pos}"
+        else:
+            # нет ФИО -> вместо ФИО/Должности пишем notes
+            # если notes пустой, то хотя бы прочерк, чтобы контакт не был пустым
+            header = notes if notes else "-"
+
+        # Телефоны / emails с primary первым
+        phones = sort_primary_first(c.phones.all())
+        emails = sort_primary_first(c.emails.all())
+
+        phone_str = ", ".join(p.phone for p in phones if getattr(p, "phone", None))
+        email_str = "; ".join(e.email for e in emails if getattr(e, "email", None))
+
+        # Сборка строки контакта
+        parts = []
+        if phone_str:
+            parts.append(phone_str)
+        if email_str:
+            parts.append(email_str)
+
+        if parts:
+            contact_chunks.append(f"{header}: " + "; ".join(parts))
+        else:
+            contact_chunks.append(header)
+
+    return "\n ".join(contact_chunks)
+
+def format_products(company):
+    products = company.product.all()
+    return ", ".join(p.name for p in products) if products else ""
+
+def excel_builder(companies_qs, filters_info, export_fields):
+    export_fields_dict = {
+        "name": (
+            "Наименование компании",
+            lambda c: c.name_ru or "",
+        ),
+        "bin": (
+            "БИН",
+            lambda c: c.company_bin or "",
+        ),
+        "director": (
+            "Руководитель",
+            lambda c: c.ceo or "",
+        ),
+        "region": (
+            "Область",
+            format_kato_region_name,  # использует c.kato
+        ),
+        "description": (
+            "Описание продукции",
+            lambda c: c.product_description or "",
+        ),
+        "products": (
+            "Товары",
+            format_products,  # c.product.all()
+        ),
+        "contacts": (
+            "Контакты",
+            format_contacts,
+        ),
+        "oked": (
+            "ОКЭД",
+            lambda c: c.primary_oked.oked_name if c.primary_oked else "",
+        ),
+        "krp": (
+            "КРП",
+            lambda c: c.krp.krp_name if c.krp else "",
+        ),
+        "kse": (
+            "КСЕ",
+            lambda c: c.kse.kse_name if c.kse else "",
+        ),
+        "kfs": (
+            "КФС",
+            lambda c: c.kfc.kfc_name if c.kfc else "",
+        ),
+
+        # --- можно включить при необходимости ---
+        "tn_veds": (
+            "ТН ВЭД коды",
+            lambda c: ", ".join(t.tn_ved_code for t in c.tnveds.all()),
+        ),
+
+        "secondary_okeds": (
+            "Доп. ОКЭД",
+            lambda c: ", ".join(o.oked_code for o in c.secondary_okeds.all()),
+        ),
+
+        "industry": (
+            "Отрасль",
+            lambda c: c.industry.name if c.industry else "",
+        ),
+    }
+
+
     title_text = build_excel_title(filters_info)
 
     wb = Workbook()
@@ -85,7 +195,9 @@ def excel_builder(companies_qs, filters_info):
     # -------------------------
     # Columns
     # -------------------------
-    columns = ["Наименование", "Область", "Товары", "Контакты"]
+    valid_fields = [k for k in export_fields if k in export_fields_dict]
+
+    columns = [export_fields_dict[k][0] for k in valid_fields]
     ncols = len(columns)
 
     # -------------------------
@@ -118,74 +230,31 @@ def excel_builder(companies_qs, filters_info):
     ws.auto_filter.ref = f"A{header_row}:{get_column_letter(ncols)}{header_row}"
 
     # -------------------------
-    # Helpers
-    # -------------------------
-    def format_contacts(company):
-        def sort_primary_first(items):
-            # items: iterable with attr is_primary (bool)
-            return sorted(items, key=lambda x: (not getattr(x, "is_primary", False), getattr(x, "id", 0)))
-
-        contact_chunks = []
-
-        for c in company.contacts.all():
-            name = (c.full_name or "").strip()
-            pos = (c.position or "").strip()
-            notes = (getattr(c, "notes", "") or "").strip()
-
-            # Заголовок контакта
-            if name:
-                header = name
-                if pos:
-                    header = f"{header} - {pos}"
-            else:
-                # нет ФИО -> вместо ФИО/Должности пишем notes
-                # если notes пустой, то хотя бы прочерк, чтобы контакт не был пустым
-                header = notes if notes else "-"
-
-            # Телефоны / emails с primary первым
-            phones = sort_primary_first(c.phones.all())
-            emails = sort_primary_first(c.emails.all())
-
-            phone_str = ", ".join(p.phone for p in phones if getattr(p, "phone", None))
-            email_str = "; ".join(e.email for e in emails if getattr(e, "email", None))
-
-            # Сборка строки контакта
-            parts = []
-            if phone_str:
-                parts.append(phone_str)
-            if email_str:
-                parts.append(email_str)
-
-            if parts:
-                contact_chunks.append(f"{header}: " + "; ".join(parts))
-            else:
-                contact_chunks.append(header)
-
-        return "\n ".join(contact_chunks)
-
-    def format_products(company):
-        products = company.product.all()
-        return ", ".join(p.name for p in products) if products else ""
-
-    # -------------------------
     # Column widths
     # -------------------------
-    widths = {1: 42, 2: 26, 3: 40, 4: 60}
-    for col_idx, w in widths.items():
-        ws.column_dimensions[get_column_letter(col_idx)].width = w
+    FIXED_WIDTH = 35  # можешь поставить любое значение
+
+    for col_idx in range(1, ncols + 1):
+        ws.column_dimensions[get_column_letter(col_idx)].width = FIXED_WIDTH
 
     # -------------------------
     # Data rows
     # -------------------------
-    row_idx = 3
     for company in companies_qs:
-        row_idx += 1
-        ws.cell(row=row_idx, column=1, value=company.name_ru or "")
-        ws.cell(row=row_idx, column=2, value=format_kato_region_name(company))
-        ws.cell(row=row_idx, column=3, value=format_products(company))
-        ws.cell(row=row_idx, column=4, value=format_contacts(company))
+        # print(company, type(company))
+        data_row = []
 
-        for col_idx in range(1, ncols + 1):
+        for key in valid_fields:
+            getter = export_fields_dict[key][1]
+            try:
+                data_row.append(getter(company) or "")
+            except Exception:
+                data_row.append("")
+
+        ws.append(data_row)
+        row_idx = ws.max_row
+
+        for col_idx in range(1, len(data_row) + 1):
             cell = ws.cell(row=row_idx, column=col_idx)
             cell.alignment = align_left_top_wrap
             cell.border = border_thin
