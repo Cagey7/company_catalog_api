@@ -194,3 +194,17 @@ class Tnved(models.Model):
         db_table = "tnved"
         verbose_name = "ТН ВЭДы"
         verbose_name_plural = "ТН ВЭДы"
+
+
+
+class Country(models.Model):
+    name = models.CharField(max_length=100, unique=True, verbose_name="Название страны")
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        db_table = "countries"
+        verbose_name = "Страна"
+        verbose_name_plural = "Страны"
+        ordering = ["name"]

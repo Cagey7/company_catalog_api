@@ -7,9 +7,12 @@ from django.db.models import Count
 from django.urls import path, reverse
 from django.shortcuts import get_object_or_404, redirect
 from django.utils.html import format_html
+from requests import request
 from .models import Company, CompanyContact, ContactEmail, ContactPhone, Certificate
-from dictionaries.models import Industry, Kato, Oked, Krp, Product, Tnved
-from programs.models import Program, ProgramParticipation
+from dictionaries.models import Industry, Kato, Oked, Krp, Product, Tnved, Country, Kse, Kfc
+from programs.models import Program, ProgramParticipation, TEMParticipation, AccelerationParticipation
+from django.http import HttpResponse, QueryDict
+from urllib.parse import quote
 
 from .services.excel_builder import excel_builder
 
@@ -332,6 +335,99 @@ class ProductDrilldownFilter(SimpleListFilter):
 
         return queryset.filter(product__path__startswith=selected.path).distinct()
 
+
+class AccelerationYearFilter(admin.SimpleListFilter):
+    title = "Акселерация: год"
+    parameter_name = "acc_year"
+
+    def lookups(self, request, model_admin):
+        years = (
+            AccelerationParticipation.objects
+            .exclude(year__isnull=True)
+            .values_list("year", flat=True)
+            .distinct()
+            .order_by("-year")
+        )
+        return [(str(y), str(y)) for y in years]
+
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(acceleration_participations__year=int(self.value())).distinct()
+        return queryset
+
+
+class TEMDrilldownFilter(admin.SimpleListFilter):
+    title = "ТЭМ: год / страна"
+    parameter_name = "tem_part"
+
+    # Формат value:
+    #   "y:<year>"              -> выбран год
+    #   "yc:<year>:<country>"  -> выбран год + страна
+
+    def lookups(self, request, model_admin):
+        raw = request.GET.get(self.parameter_name)
+
+        # -------- уровень 1: годы --------
+        if not raw or not raw.startswith("y:"):
+            years = (
+                TEMParticipation.objects
+                .values_list("year", flat=True)
+                .distinct()
+                .order_by("-year")
+            )
+            return [(f"y:{y}", str(y)) for y in years]
+
+        # -------- уровень 2: страны для выбранного года --------
+        try:
+            year = int(raw.split(":")[1])
+        except (ValueError, IndexError):
+            return []
+
+        items = []
+        items.append(("__back__", "⬆️ Назад к годам"))
+
+        countries = (
+            Country.objects
+            .filter(trade_missions__year=year)
+            .distinct()
+            .order_by("name")
+        )
+
+        for c in countries:
+            items.append((f"yc:{year}:{c.id}", c.name))
+
+        return items
+
+    def queryset(self, request, queryset):
+        raw = self.value()
+        if not raw:
+            return queryset
+
+        if raw == "__back__":
+            return queryset
+
+        # выбран год
+        if raw.startswith("y:"):
+            try:
+                year = int(raw.split(":")[1])
+            except (ValueError, IndexError):
+                return queryset
+            return queryset.filter(trade_missions__year=year).distinct()
+
+        # выбран год + страна
+        if raw.startswith("yc:"):
+            try:
+                _, year, country_id = raw.split(":")
+                return queryset.filter(
+                    trade_missions__year=int(year),
+                    trade_missions__country_id=int(country_id),
+                ).distinct()
+            except ValueError:
+                return queryset
+
+        return queryset
+
+
 # -------------------------
 # Inlines for contact details
 # -------------------------
@@ -354,6 +450,17 @@ class ProgramParticipationInline(admin.TabularInline):
     autocomplete_fields = ("program",)   # удобно, если программ много
     fields = ("program", "year")
 
+class AccelerationParticipationInline(admin.TabularInline):
+    model = AccelerationParticipation
+    extra = 0
+    fields = ("year",)
+
+
+class TEMParticipationInline(admin.TabularInline):
+    model = TEMParticipation
+    extra = 0
+    autocomplete_fields = ("country",)   # удобно, если стран много
+    fields = ("country", "year")
 # -------------------------
 # Filters for mailing flags
 # -------------------------
@@ -494,8 +601,11 @@ class CompanyAdmin(admin.ModelAdmin):
         KrpDrilldownFilter,
         ProgramParticipationDrilldownFilter,
         ProductDrilldownFilter,
+        AccelerationYearFilter,
+        TEMDrilldownFilter,
         "kfc",
     )
+
 
     search_fields = (
         "name_ru",
@@ -522,7 +632,12 @@ class CompanyAdmin(admin.ModelAdmin):
     # ✅ добавили readonly поле региона
     readonly_fields = ("updated", "load_data_button", "kato_region")
 
-    inlines = (CompanyContactInline, ProgramParticipationInline)
+    inlines = (
+        CompanyContactInline,
+        ProgramParticipationInline,
+        AccelerationParticipationInline,
+        TEMParticipationInline,
+    )
 
     fieldsets = (
         ("Основная информация", {
@@ -564,7 +679,15 @@ class CompanyAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         # базовая оптимизация: подтягиваем kato одним join
-        return qs.select_related("kato", "industry", "primary_oked", "kfc", "kse", "krp").prefetch_related("certificates","program_participations__program",)
+        return (
+            qs.select_related("kato", "industry", "primary_oked", "kfc", "kse", "krp")
+            .prefetch_related(
+                "certificates",
+                "program_participations__program",
+                "acceleration_participations",
+                "trade_missions__country",
+            )
+        )
 
 
     @admin.display(description="Сертификаты")
@@ -641,48 +764,57 @@ class CompanyAdmin(admin.ModelAdmin):
     change_list_template = "admin/program_participation_change_list.html"
 
     def export_xlsx(self, request):
-        # 1) забираем выбранные поля и просто печатаем
+        # 1) поля экспорта (до подмены GET!)
         export_fields = request.GET.getlist("fields")
-        print("EXPORT FIELDS:", export_fields)
 
-        # 2) убираем fields из GET, чтобы админка не пыталась фильтровать по "fields"
-        get_params = request.GET.copy()
-        get_params.pop("fields", None)
-        request.GET = get_params
+        # 2) фильтры админки (спрятаны в hidden)
+        changelist_filters = request.GET.get("_changelist_filters", "")
 
-        # 3) дальше твой код как есть
+        # 3) подменяем GET, чтобы ChangeList применил фильтры "как на экране"
+        request.GET = QueryDict(changelist_filters, mutable=False)
+
+        # 4) queryset как в админке
         cl = self.get_changelist_instance(request)
-
         companies_qs = (
             cl.get_queryset(request)
             .select_related(
-            "industry",
-            "kato",
-            "primary_oked",
-            "kfc",
-            "kse",
-            "krp"
+                "industry",
+                "kato",
+                "primary_oked",
+                "kfc",
+                "kse",
+                "krp",
             )
             .prefetch_related(
-            "contacts__emails",
-            "contacts__phones",
-            "certificates",
-            "secondary_okeds",
-            "product",
-            "tnveds",
-            "program_participations__program"
+                "contacts__emails",
+                "contacts__phones",
+                "certificates",
+                "secondary_okeds",
+                "product",
+                "tnveds",
+                "program_participations__program",
+                "acceleration_participations",
+                "trade_missions__country",
             )
         )
-        filters_info = get_export_filters_values(request)
-        filename = build_export_filename(filters_info)
+
+        # 5) осмысленные значения фильтров + красивое имя файла
+        filters_info = get_export_filters_values(request)   # <- теперь это уже человекочитаемо
+        print(filters_info)
+        filename = build_export_filename(filters_info, prefix="companies")
+        if not filename.lower().endswith(".xlsx"):
+            filename += ".xlsx"
+
+        # 6) собираем workbook
         wb = excel_builder(companies_qs, filters_info, export_fields)
 
+        # 7) ответ
         response = HttpResponse(
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+        ascii_fallback = "companies.xlsx"
+        quoted = quote(filename, safe="")
 
-        ascii_fallback = "компании.xlsx"
-        quoted = quote(filename)
         response["Content-Disposition"] = (
             f'attachment; filename="{ascii_fallback}"; '
             f"filename*=UTF-8''{quoted}"
@@ -723,67 +855,106 @@ def _get_name_by_pk(model, pk, field):
 
 
 def get_export_filters_values(request):
-    raw = get_export_filters_raw(request)
-    values = {}
+    qd = request.GET
 
-    industry_id = _first_present(raw, "industry", "industry__id__exact", "industry__exact")
-    if industry_id:
-        values["industry"] = _get_name_by_pk(Industry, industry_id, "name")
+    def by_pk(model, pk, field=None):
+        if not pk:
+            return ""
+        if field:
+            return model.objects.filter(pk=pk).values_list(field, flat=True).first() or str(pk)
+        obj = model.objects.filter(pk=pk).first()
+        return str(obj) if obj else str(pk)
 
-    kato_id = _first_present(raw, "kato_node", "kato_node__id__exact", "kato_node__exact")
-    if kato_id:
-        values["kato_node"] = _get_name_by_pk(Kato, kato_id, "kato_name")
+    def program_part_to_text(raw):
+        # p:<program_id> или py:<program_id>:<year> или __back__
+        if not raw or raw == "__back__":
+            return ""
+        if raw.startswith("p:"):
+            _, pid = raw.split(":", 1)
+            name = by_pk(Program, pid, "name")
+            return f"«{name}»" if name else ""
+        if raw.startswith("py:"):
+            _, pid, year = raw.split(":", 2)
+            name = by_pk(Program, pid, "name")
+            return f"«{name}» ({year})" if name else ""
+        return raw
 
-    oked_id = _first_present(raw, "oked_node", "oked_node__id__exact", "oked_node__exact")
-    if oked_id:
-        values["oked_node"] = _get_name_by_pk(Oked, oked_id, "oked_name")
+    def tem_part_to_text(raw):
+        # y:<year> или yc:<year>:<country_id> или __back__
+        if not raw or raw == "__back__":
+            return ""
+        if raw.startswith("y:"):
+            _, year = raw.split(":", 1)
+            return year
+        if raw.startswith("yc:"):
+            _, year, cid = raw.split(":", 2)
+            cname = by_pk(Country, cid, "name")
+            return f"{year} — {cname}" if cname else year
+        return raw
 
-    krp_id = _first_present(raw, "krp_node", "krp_node__id__exact", "krp_node__exact")
-    if krp_id:
-        values["krp_node"] = _get_name_by_pk(Krp, krp_id, "krp_name")
+    FILTER_MAP = {
+        "q": ("Поиск", lambda v: v),
 
-    product_node_id = _first_present(raw, "product_node", "product_node__id__exact", "product_node__exact")
-    if product_node_id:
-        values["product_node"] = _get_name_by_pk(Product, product_node_id, "name")
+        # ✅ реальные ключи твоих фильтров
+        "industry": ("Отрасль", lambda v: by_pk(Industry, v, "name")),
+        "kato_node": ("Регион", lambda v: by_pk(Kato, v, "kato_name")),
+        "oked_node": ("ОКЭД", lambda v: by_pk(Oked, v, "oked_name")),
+        "krp_node": ("КРП", lambda v: by_pk(Krp, v, "krp_name")),
+        "product_node": ("Товар", lambda v: by_pk(Product, v, "name")),
 
-    program_part = raw.get("program_part")
-    if program_part:
-        if program_part.startswith("p:"):
-            _, program_id = program_part.split(":")
-            values["program_part"] = {"program": _get_name_by_pk(Program, program_id, "name")}
-        elif program_part.startswith("py:"):
-            _, program_id, year = program_part.split(":")
-            values["program_part"] = {"program": _get_name_by_pk(Program, program_id, "name"), "year": int(year) if year.isdigit() else year}
+        "program_part": ("Программа", program_part_to_text),
+        "acc_year": ("Акселерация: год", lambda v: v),
+        "tem_part": ("ТЭМ", tem_part_to_text),
 
-    return values
+        # ✅ обычный fk фильтр
+        "kfc__id__exact": ("КФС", lambda v: by_pk(Kfc, v, "kfc_name")),
+    }
+
+    IGNORE_KEYS = {
+        "p", "o", "ot", "all",
+        "_popup", "_to_field",
+        "_changelist_filters", "fields",
+    }
+
+    out = []
+    for key in qd.keys():
+        if key in IGNORE_KEYS:
+            continue
+
+        values = [v for v in qd.getlist(key) if v not in (None, "", "None")]
+        if not values:
+            continue
+
+        if key in FILTER_MAP:
+            label, conv = FILTER_MAP[key]
+            human_values = [conv(v) for v in values]
+            human_values = [hv for hv in human_values if hv]
+            if human_values:
+                out.append({"key": key, "label": label, "value": ", ".join(human_values)})
+        else:
+            out.append({"key": key, "label": key, "value": ", ".join(values)})
+
+    return out
+
 
 
 def build_export_filename(filters_info, prefix="companies"):
-    parts = []
+    """
+    Строит осмысленное имя файла из человекочитаемых фильтров.
+    """
+    def clean(s: str) -> str:
+        s = str(s)
+        s = re.sub(r"\s+", " ", s).strip()
+        s = s.replace("/", "-")
+        s = re.sub(r"[^0-9A-Za-zА-Яа-яЁё _\-.]", "", s)
+        s = s.replace(" ", "_")
+        return s[:60]
 
-    for key in ("industry", "kato_node", "krp_node", "product_node"):
-        val = filters_info.get(key)
-        if val:
-            parts.append(val)
+    parts = [prefix]
+    for item in filters_info:
+        label = clean(item["label"])
+        value = clean(item["value"])
+        if label and value:
+            parts.append(f"{label}-{value}")
 
-    program = filters_info.get("program_part")
-    if isinstance(program, dict):
-        name = program.get("program")
-        year = program.get("year")
-        if name and year:
-            parts.append(f"{name}_{year}")
-        elif name:
-            parts.append(name)
-
-    if not parts:
-        base = prefix
-    else:
-        base = prefix + "_" + "_".join(parts)
-
-    # 🔥 чистим имя файла от мусора
-    base = base.lower()
-    base = re.sub(r"[^\w\d\-_. ]+", "", base)   # убираем спецсимволы
-    base = re.sub(r"\s+", "_", base)            # пробелы → _
-    base = base.strip("_")
-
-    return f"{base}.xlsx"
+    return "_".join(parts)

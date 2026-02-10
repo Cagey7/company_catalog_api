@@ -7,10 +7,10 @@ DEBUG = True
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": "companies_db",
+        "NAME": "com2",
         "USER": "postgres",
-        "PASSWORD": "silverlampqaztrade!",
-        "HOST": "13.60.228.241",
+        "PASSWORD": "123456",
+        "HOST": "localhost",
         "PORT": "5432",
     }
 }

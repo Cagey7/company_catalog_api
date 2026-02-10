@@ -45,33 +45,40 @@
   {{ block.super }}
   <li>
     <form method="get" action="{% url 'admin:companies_company_export_xlsx' %}" style="display: inline;">
+      {# ВАЖНО: переносим текущие админские фильтры/поиск/сортировку в экспорт #}
+      <input type="hidden" name="_changelist_filters" value="{{ request.GET.urlencode }}">
+
       <div class="export-container">
         <div class="export-select-wrapper">
-            <select id="export-fields" name="fields" multiple data-placeholder="Выберите поля...">
-              <option value="name" selected>Наименование компании</option>
-              <option value="bin" >БИН</option>
-              <option value="director" >Руководитель</option>
-              <option value="region" selected>Область</option>
-              <option value="description" selected>Описание продукции</option>
-              <option value="contacts" selected>Контакты</option>
-              <option value="products" selected>Товары</option>
-              <option value="oked" >ОКЭД</option>
-              <option value="certificates" >Сертификаты</option>
-              <option value="program_participation" >Участие в программах</option>
-              <option value="krp">КРП</option>
-              <option value="kse">КСЕ</option>
-              <option value="kfs">КФС</option>
-              <option value="tn_veds">TН ВЭД коды</option>
-            </select>
+          <select id="export-fields" name="fields" multiple data-placeholder="Выберите поля...">
+            <option value="name" selected>Наименование компании</option>
+            <option value="bin">БИН</option>
+            <option value="director">Руководитель</option>
+            <option value="region" selected>Область</option>
+            <option value="industry" selected>Отрасль</option>
+            <option value="description" selected>Описание продукции</option>
+            <option value="contacts" selected>Контакты</option>
+            <option value="products" selected>Товары</option>
+            <option value="oked">ОКЭД</option>
+            <option value="certificates">Сертификаты</option>
+            <option value="krp">КРП</option>
+            <option value="kse">КСЕ</option>
+            <option value="kfs">КФС</option>
+            <option value="tn_veds">TН ВЭД коды</option>
+          </select>
         </div>
+
         <input type="submit" value="Export XLSX" class="export-button">
       </div>
     </form>
   </li>
+
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       const element = document.getElementById('export-fields');
-      const choices = new Choices(element, {
+      if (!element) return;
+
+      new Choices(element, {
         removeItemButton: true,
         placeholder: true,
         placeholderValue: 'Выберите поля для экспорта',

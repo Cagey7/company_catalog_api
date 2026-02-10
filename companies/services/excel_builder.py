@@ -2,33 +2,89 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 
-from dictionaries.models import Kato  # важно: нужен доступ к модели КАТО
+from dictionaries.models import Industry, Kato, Kfc, Oked, Krp, Product
+from programs.models import Program
+from programs.models import Country  
 
 
 def build_excel_title(filters):
-    
     parts = []
+    print("filters in title builder:", filters)  # отладочный принт, можно удалить
 
-    if filters.get("kato_node"):
-        parts.append(filters["kato_node"])
+    # Подписи для фильтров
+    LABELS = {
+        "kato_node": "Регион",
+        "krp_node": "КРП",
+        "industry": "Отрасль",
+        "product_node": "Товар",
+        "program_part": "Программа",
+        "oked_node": "ОКЭД",
+        "acc_year": "Акселерация: год",
+        "tem_part": "ТЭМ",
+        "kfc__id__exact": "КФС",
+        "q": "Поиск",
+    }
 
-    if filters.get("krp_node"):
-        parts.append(filters["krp_node"])
+    def get_value(key):
+        """Достаёт значение фильтра из dict или из list[{label,value} / {key,display,value}]."""
 
-    if filters.get("industry"):
-        parts.append(filters["industry"])
+        # CASE 1: старый формат dict
+        if hasattr(filters, "get"):
+            return filters.get(key)
 
-    if filters.get("product_node"):
-        parts.append(filters["product_node"])
+        # CASE 2: новый формат list
+        if isinstance(filters, (list, tuple)):
+            for item in filters:
+                if not isinstance(item, dict):
+                    continue
 
-    program = filters.get("program_part")
+                # варианты формата
+                item_key = item.get("key")
+                item_label = item.get("label")
+                item_value = item.get("value")
+                item_display = item.get("display")
+
+                # 2.1 если совпало по key
+                if item_key == key:
+                    return item_display or item_value
+
+                # 2.2 если у тебя список уже в виде {"label": "...", "value": "..."}
+                # тогда ищем по подписи
+                if item_label and LABELS.get(key) == item_label:
+                    return item_value
+
+        return None
+
+    def add(key):
+        val = get_value(key)
+        if val:
+            parts.append(f"{LABELS.get(key, key)}: {val}")
+
+    # ---- основные фильтры (как у тебя было) ----
+    add("kato_node")
+    add("krp_node")
+    add("industry")
+    add("product_node")
+
+    # ---- новые фильтры ----
+    add("oked_node")
+    add("acc_year")
+    add("tem_part")
+    add("kfc__id__exact")
+    add("q")
+
+    # ---- программа (если в dict-формате со структурой) ----
+    program = get_value("program_part")
     if isinstance(program, dict):
         name = program.get("program")
         year = program.get("year")
         if name and year:
-            parts.append(f"программа «{name}» ({year})")
+            parts.append(f"{LABELS['program_part']}: «{name}» ({year})")
         elif name:
-            parts.append(f"программа «{name}»")
+            parts.append(f"{LABELS['program_part']}: «{name}»")
+    elif program:
+        # если program_part уже строкой (человекочитаемо)
+        parts.append(f"{LABELS['program_part']}: {program}")
 
     if not parts:
         return "В данном списке представлены все компании без применения фильтров."
@@ -38,6 +94,7 @@ def build_excel_title(filters):
         + ", ".join(parts)
         + "."
     )
+
 
 
 def format_kato_region_name(company):
@@ -126,6 +183,10 @@ def excel_builder(companies_qs, filters_info, export_fields):
         "region": (
             "Область",
             format_kato_region_name,  # использует c.kato
+        ),
+        "ind": (
+            "Отрасль",
+            lambda c: c.industry.name if c.industry else "",
         ),
         "description": (
             "Описание продукции",

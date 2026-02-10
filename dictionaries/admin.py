@@ -2,7 +2,7 @@ from django.contrib import admin
 
 from .models import (
     Krp, Kse, Kfc, Kato, Oked,
-    Industry, Product, Tnved
+    Industry, Product, Tnved, Country
 )
 
 
@@ -50,3 +50,9 @@ class ProductAdmin(admin.ModelAdmin):
 class TnvedAdmin(admin.ModelAdmin):
     list_display = ("tn_ved_code", "tn_ved_name")
     search_fields = ("tn_ved_code", "tn_ved_name")
+
+
+@admin.register(Country)
+class CountryAdmin(admin.ModelAdmin):
+    list_display = ("name",)
+    search_fields = ("name",)
